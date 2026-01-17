@@ -11,6 +11,7 @@ export interface RenderedPage {
   rawData?: string;
   screenshotPath?: string;
   debugHtmlPath?: string;
+  debugDataPath?: string;  // Add debug data JSON path
   page?: Page;  // Add page reference for advanced extraction
 }
 

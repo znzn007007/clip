@@ -4,6 +4,8 @@ import type { RenderedPage, RenderOptions } from './types.js';
 import { detectPlatform, isValidUrl } from './utils.js';
 import { DEFAULT_TIMEOUT, DEFAULT_MAX_SCROLLS } from '../config/constants.js';
 import { TwitterRawExtractor } from '../extract/adapters/twitter/raw-extractor.js';
+import { promises as fs } from 'fs';
+import { join } from 'path';
 
 export class PageRenderer {
   constructor(private context: BrowserContext) {}
@@ -51,9 +53,28 @@ export class PageRenderer {
     // Debug outputs
     let screenshotPath: string | undefined;
     let debugHtmlPath: string | undefined;
+    let debugDataPath: string | undefined;
 
     if (options.debug) {
-      // Save debug info (implementation later)
+      const timestamp = Date.now();
+      const debugDir = join(process.cwd(), 'debug');
+
+      // Ensure debug directory exists
+      await fs.mkdir(debugDir, { recursive: true });
+
+      // Save HTML snapshot
+      debugHtmlPath = join(debugDir, `debug-twitter-${timestamp}.html`);
+      await fs.writeFile(debugHtmlPath, html);
+
+      // Save raw data if available
+      if (rawData) {
+        debugDataPath = join(debugDir, `debug-data-${timestamp}.json`);
+        await fs.writeFile(debugDataPath, rawData);
+
+        console.error(`[DEBUG] rawData source: ${JSON.parse(rawData).metadata?.extractedFrom || 'unknown'}`);
+        const tweetCount = JSON.parse(rawData).tweets?.length || 0;
+        console.error(`[DEBUG] tweets found: ${tweetCount}`);
+      }
     }
 
     return {
@@ -65,6 +86,7 @@ export class PageRenderer {
       rawData,
       screenshotPath,
       debugHtmlPath,
+      debugDataPath,
       page,  // Include page for DOM extraction
     };
   }
