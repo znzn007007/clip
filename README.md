@@ -2,10 +2,34 @@
 
 Local content archiver for Twitter, Zhihu, and WeChat Official Accounts.
 
+## Prerequisites
+
+- Node.js 18 or higher
+
 ## Installation
+
+### For Users (Coming Soon)
 
 ```bash
 npm install -g clip-client
+```
+
+### For Development
+
+```bash
+git clone <repo>
+cd clip
+npm install
+npm run build
+npm link  # Optional: for local testing
+```
+
+## Browser Setup
+
+The tool uses your system Chrome by default. If needed, install Playwright browsers:
+
+```bash
+clip install-browsers
 ```
 
 ## Quick Start
@@ -17,8 +41,14 @@ clip once "https://x.com/user/status/123"
 # Specify output directory
 clip once "https://x.com/user/status/123" --out ~/my-clips
 
-# Output JSON
+# Output JSON metadata
 clip once "https://x.com/user/status/123" --json
+
+# Skip asset downloads
+clip once "https://x.com/user/status/123" --no-assets
+
+# Debug mode (save screenshots and HTML)
+clip once "https://x.com/user/status/123" --debug
 ```
 
 ## Output Structure
