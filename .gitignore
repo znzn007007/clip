@@ -4,3 +4,4 @@ clips/
 *.log
 .DS_Store
 .env
+tmpclaude-*
