@@ -1,11 +1,12 @@
 // src/core/extract/registry.ts
 import type { Adapter } from './types.js';
 import { TwitterAdapter } from './adapters/twitter.js';
+import { ZhihuAdapter } from './adapters/zhihu/index.js';
 
 export class AdapterRegistry {
   private adapters: Adapter[] = [
     new TwitterAdapter(),
-    // More adapters will be added here
+    new ZhihuAdapter(),
   ];
 
   select(url: string): Adapter {
