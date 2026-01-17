@@ -7,8 +7,6 @@ export function registerInstallBrowsersCommand(program: Command): void {
     .command('install-browsers')
     .description('Install Playwright browsers (optional fallback)')
     .action(async () => {
-      console.log('Installing Playwright browsers...');
-
       try {
         execSync('npx playwright install chromium', {
           stdio: 'inherit',
