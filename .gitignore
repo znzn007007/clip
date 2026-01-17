@@ -6,3 +6,4 @@ clips/
 .env
 tmpclaude-*
 .worktrees/
+debug/
