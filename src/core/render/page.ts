@@ -3,6 +3,7 @@ import type { BrowserContext, Page } from 'playwright';
 import type { RenderedPage, RenderOptions } from './types.js';
 import { detectPlatform, isValidUrl } from './utils.js';
 import { DEFAULT_TIMEOUT, DEFAULT_MAX_SCROLLS } from '../config/constants.js';
+import { TwitterRawExtractor } from '../extract/adapters/twitter/raw-extractor.js';
 
 export class PageRenderer {
   constructor(private context: BrowserContext) {}
@@ -97,23 +98,12 @@ export class PageRenderer {
 
   private async extractTwitterRawData(page: Page): Promise<string | undefined> {
     try {
-      const data = await page.evaluate(() => {
-        // Try window.__STATE__
-        const state = (window as any).__STATE__;
-        if (state) return JSON.stringify(state);
-
-        // Fallback: extract from script tags
-        const scripts = document.querySelectorAll('script');
-        for (const script of scripts) {
-          const text = script.textContent || '';
-          if (text.includes('tweet') && text.includes('result')) {
-            const match = text.match(/({.*})/);
-            if (match) return match[0];
-          }
-        }
-        return undefined;
-      });
-      return data;
+      const extractor = new TwitterRawExtractor();
+      const rawData = await extractor.extract(page);
+      if (rawData) {
+        return JSON.stringify(rawData);
+      }
+      return undefined;
     } catch {
       return undefined;
     }
