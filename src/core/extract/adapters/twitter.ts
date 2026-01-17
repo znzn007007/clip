@@ -33,7 +33,7 @@ export class TwitterAdapter extends BaseAdapter {
 
     // Fallback path: parse from HTML
     try {
-      return this.extractFromHtml(page);
+      return await this.extractFromHtml(page);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       warnings.push(`HTML parsing failed: ${message}`);
@@ -62,7 +62,25 @@ export class TwitterAdapter extends BaseAdapter {
     };
   }
 
-  private extractFromHtml(page: RenderedPage): ExtractResult {
+  private async extractFromHtml(page: RenderedPage): Promise<ExtractResult> {
+    // Prefer DOM extraction if page is available
+    if (page.page) {
+      try {
+        const rawData = await this.domExtractor.extract(page.page);
+        const tweets = this.parser.parseFromRawState(rawData);
+
+        if (tweets.length > 0) {
+          return {
+            doc: this.buildDocFromTweets(tweets, page),
+            warnings: ['Used DOM extraction'],
+          };
+        }
+      } catch (error) {
+        console.error('[DEBUG] DOM extraction failed:', error);
+      }
+    }
+
+    // Fallback to cheerio HTML parsing
     const $ = cheerio.load(page.html);
     const tweets: TweetData[] = [];
 

@@ -19,57 +19,54 @@ export class PageRenderer {
 
     const page = await this.context.newPage();
 
-    try {
-      // Navigate to URL
-      await page.goto(url, {
-        waitUntil: 'commit',
-        timeout,
-      });
+    // Navigate to URL
+    await page.goto(url, {
+      waitUntil: 'commit',
+      timeout,
+    });
 
-      // Wait for main content
-      const contentSelector = options.waitForSelector || 'article, main, [role="main"]';
-      await page.waitForSelector(contentSelector, { timeout: 5000 }).catch(() => {
-        // Continue even if selector not found
-      });
+    // Wait for main content
+    const contentSelector = options.waitForSelector || 'article, main, [role="main"]';
+    await page.waitForSelector(contentSelector, { timeout: 5000 }).catch(() => {
+      // Continue even if selector not found
+    });
 
-      // Platform-specific handling
-      const platform = detectPlatform(new URL(url));
+    // Platform-specific handling
+    const platform = detectPlatform(new URL(url));
 
-      let rawData: string | undefined;
-      if (platform === 'twitter') {
-        rawData = await this.extractTwitterRawData(page);
-      }
-
-      if (platform === 'twitter') {
-        await this.handleTwitter(page, maxScrolls);
-      }
-
-      // Extract page info
-      const title = await page.title();
-      const canonicalUrl = await this.extractCanonicalUrl(page);
-      const html = await page.content();
-
-      // Debug outputs
-      let screenshotPath: string | undefined;
-      let debugHtmlPath: string | undefined;
-
-      if (options.debug) {
-        // Save debug info (implementation later)
-      }
-
-      return {
-        url,
-        canonicalUrl,
-        title,
-        html,
-        platform,
-        rawData,
-        screenshotPath,
-        debugHtmlPath,
-      };
-    } finally {
-      await page.close();
+    let rawData: string | undefined;
+    if (platform === 'twitter') {
+      rawData = await this.extractTwitterRawData(page);
     }
+
+    if (platform === 'twitter') {
+      await this.handleTwitter(page, maxScrolls);
+    }
+
+    // Extract page info
+    const title = await page.title();
+    const canonicalUrl = await this.extractCanonicalUrl(page);
+    const html = await page.content();
+
+    // Debug outputs
+    let screenshotPath: string | undefined;
+    let debugHtmlPath: string | undefined;
+
+    if (options.debug) {
+      // Save debug info (implementation later)
+    }
+
+    return {
+      url,
+      canonicalUrl,
+      title,
+      html,
+      platform,
+      rawData,
+      screenshotPath,
+      debugHtmlPath,
+      page,  // Include page for DOM extraction
+    };
   }
 
   private async handleTwitter(page: Page, maxScrolls: number): Promise<void> {
