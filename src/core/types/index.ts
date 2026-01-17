@@ -23,7 +23,9 @@ export type Block =
   | ListBlock
   | ImageBlock
   | LinkBlock
-  | VideoBlock;
+  | VideoBlock
+  | TweetMetaBlock
+  | HashtagBlock;
 
 export interface ParagraphBlock {
   type: 'paragraph';
@@ -71,6 +73,20 @@ export interface VideoBlock {
   type: 'video';
   url: string;
   thumbnail?: string;
+}
+
+export interface TweetMetaBlock {
+  type: 'tweet_meta';
+  likes: number;
+  retweets: number;
+  replies: number;
+  views: number;
+}
+
+export interface HashtagBlock {
+  type: 'hashtag';
+  tag: string;
+  url: string;
 }
 
 export interface AssetImage {
