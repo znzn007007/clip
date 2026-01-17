@@ -34,6 +34,11 @@ export class PageRenderer {
       // Platform-specific handling
       const platform = detectPlatform(new URL(url));
 
+      let rawData: string | undefined;
+      if (platform === 'twitter') {
+        rawData = await this.extractTwitterRawData(page);
+      }
+
       if (platform === 'twitter') {
         await this.handleTwitter(page, maxScrolls);
       }
@@ -57,6 +62,7 @@ export class PageRenderer {
         title,
         html,
         platform,
+        rawData,
         screenshotPath,
         debugHtmlPath,
       };
@@ -87,6 +93,30 @@ export class PageRenderer {
 
     // Scroll back to top
     await page.evaluate(() => window.scrollTo(0, 0));
+  }
+
+  private async extractTwitterRawData(page: Page): Promise<string | undefined> {
+    try {
+      const data = await page.evaluate(() => {
+        // Try window.__STATE__
+        const state = (window as any).__STATE__;
+        if (state) return JSON.stringify(state);
+
+        // Fallback: extract from script tags
+        const scripts = document.querySelectorAll('script');
+        for (const script of scripts) {
+          const text = script.textContent || '';
+          if (text.includes('tweet') && text.includes('result')) {
+            const match = text.match(/({.*})/);
+            if (match) return match[0];
+          }
+        }
+        return undefined;
+      });
+      return data;
+    } catch {
+      return undefined;
+    }
   }
 
   private async extractCanonicalUrl(page: Page): Promise<string | undefined> {

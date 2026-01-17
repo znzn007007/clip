@@ -19,7 +19,7 @@ export class TwitterAdapter extends BaseAdapter {
     const warnings: string[] = [];
 
     // Primary path: parse from raw data (if available)
-    const rawData = (page as any).rawData;
+    const rawData = page.rawData;
     if (rawData) {
       try {
         return this.extractFromRawData(page, rawData);

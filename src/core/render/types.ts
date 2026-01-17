@@ -7,6 +7,7 @@ export interface RenderedPage {
   title?: string;
   html: string;
   platform: Platform;
+  rawData?: string;
   screenshotPath?: string;
   debugHtmlPath?: string;
 }
