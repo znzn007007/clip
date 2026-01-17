@@ -1,0 +1,30 @@
+{
+  "name": "clip-client",
+  "version": "0.1.0",
+  "description": "Local content archiver for Twitter, Zhihu, and WeChat Official Accounts",
+  "main": "dist/index.js",
+  "bin": {
+    "clip": "./dist/cli/index.js"
+  },
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "test": "jest",
+    "clip": "node dist/cli/index.js"
+  },
+  "keywords": ["cli", "archiver", "twitter", "zhihu", "wechat"],
+  "author": "nemo",
+  "license": "MIT",
+  "dependencies": {
+    "playwright": "^1.48.0",
+    "commander": "^12.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.3.0",
+    "jest": "^29.7.0",
+    "@types/jest": "^29.5.0",
+    "ts-jest": "^29.1.0"
+  }
+}
