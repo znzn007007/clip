@@ -8,6 +8,7 @@ export interface ExportOptions {
   format: ExportFormat;
   downloadAssets: boolean;
   json: boolean;
+  debug?: boolean;
 }
 
 export interface ExportPaths {

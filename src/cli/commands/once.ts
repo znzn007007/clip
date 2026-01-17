@@ -23,6 +23,7 @@ export function registerOnceCommand(program: Command): void {
           format: options.format,
           downloadAssets: options.assets,
           json: options.json,
+          debug: options.debug,
         });
 
         if (options.json) {
