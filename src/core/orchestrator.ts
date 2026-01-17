@@ -1,5 +1,5 @@
 // src/core/orchestrator.ts
-import { BrowserManager } from './render/browser.js';
+import { BrowserManager, type BrowserOptions } from './render/browser.js';
 import { PageRenderer } from './render/page.js';
 import { registry } from './extract/registry.js';
 import { MarkdownGenerator } from './export/markdown.js';
@@ -13,8 +13,8 @@ import { generateOutputPaths } from './export/path.js';
 export class ClipOrchestrator {
   private browserManager: BrowserManager;
 
-  constructor() {
-    this.browserManager = new BrowserManager();
+  constructor(options?: BrowserOptions) {
+    this.browserManager = new BrowserManager(undefined, options);
   }
 
   async archive(url: string, options: ExportOptions): Promise<ExportResult> {

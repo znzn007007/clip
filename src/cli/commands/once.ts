@@ -12,8 +12,11 @@ export function registerOnceCommand(program: Command): void {
     .option('--json', 'Output JSON to stdout', false)
     .option('--debug', 'Save debug artifacts', false)
     .option('--no-assets', 'Skip asset downloads', false)
+    .option('--cdp <endpoint>', 'Connect to existing browser via CDP (e.g., http://localhost:9222)')
     .action(async (url: string, options) => {
-      const orchestrator = new ClipOrchestrator();
+      const orchestrator = new ClipOrchestrator(
+        options.cdp ? { cdpEndpoint: options.cdp } : undefined
+      );
 
       try {
         console.log(`Archiving: ${url}`);

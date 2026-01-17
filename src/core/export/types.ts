@@ -8,6 +8,7 @@ export interface ExportOptions {
   format: ExportFormat;
   downloadAssets: boolean;
   json: boolean;
+  cdpEndpoint?: string;  // Chrome DevTools Protocol endpoint for connecting to existing browser
 }
 
 export interface ExportPaths {
