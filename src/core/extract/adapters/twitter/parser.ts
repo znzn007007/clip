@@ -1,5 +1,6 @@
 import * as cheerio from 'cheerio';
 import type { AnyNode } from 'domhandler';
+import type { TwitterRawData } from './types.js';
 
 export interface TweetData {
   id: string;
@@ -31,9 +32,57 @@ export class TwitterParser {
   /**
    * Parse from Twitter's raw state data
    */
-  parseFromRawState(_rawState: unknown): TweetData[] {
-    // For now, return empty - will be enhanced later
-    return [];
+  parseFromRawState(rawState: unknown): TweetData[] {
+    if (!rawState) return [];
+
+    let data: TwitterRawData;
+
+    // Parse if string
+    if (typeof rawState === 'string') {
+      try {
+        data = JSON.parse(rawState);
+      } catch {
+        return [];
+      }
+    } else {
+      data = rawState as TwitterRawData;
+    }
+
+    // Validate structure
+    if (!data.tweets || !Array.isArray(data.tweets)) {
+      return [];
+    }
+
+    // Convert each raw tweet to TweetData
+    return data.tweets
+      .filter(raw => raw.id) // Only include tweets with ID
+      .map(raw => this.convertRawTweetToTweetData(raw));
+  }
+
+  /**
+   * Convert RawTweet to TweetData
+   */
+  private convertRawTweetToTweetData(raw: TwitterRawData['tweets'][0]): TweetData {
+    return {
+      id: raw.id,
+      text: raw.text || '',
+      author: {
+        screenName: raw.author?.screenName || '',
+        displayName: raw.author?.name || '',
+        avatarUrl: raw.author?.avatarUrl,
+      },
+      createdAt: raw.createdAt || new Date().toISOString(),
+      metrics: {
+        likes: raw.metrics?.likes || 0,
+        retweets: raw.metrics?.retweets || 0,
+        replies: raw.metrics?.replies || 0,
+        views: raw.metrics?.views || 0,
+      },
+      media: raw.media || [],
+      hashtags: raw.hashtags || [],
+      urls: raw.urls || [],
+      quotedTweet: raw.quotedTweet ? this.convertRawTweetToTweetData(raw.quotedTweet) : undefined,
+    };
   }
 
   /**
