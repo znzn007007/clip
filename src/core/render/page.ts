@@ -21,7 +21,7 @@ export class PageRenderer {
     try {
       // Navigate to URL
       await page.goto(url, {
-        waitUntil: 'networkidle',
+        waitUntil: 'commit',
         timeout,
       });
 
