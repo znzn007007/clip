@@ -1,6 +1,6 @@
 // src/core/export/markdown.ts
 import * as fs from 'fs/promises';
-import type { ClipDoc, Block } from '../types/index.js';
+import type { ClipDoc, Block, TweetMetaBlock } from '../types/index.js';
 import { buildFrontMatter, generateOutputPaths } from './path.js';
 
 export class MarkdownGenerator {
@@ -58,8 +58,26 @@ export class MarkdownGenerator {
         }
         return `[视频链接](${block.url})`;
 
+      case 'hashtag':
+        return `[${block.tag}](${block.url})`;
+
+      case 'tweet_meta':
+        return this.formatTweetMeta(block);
+
       default:
         return '';
     }
+  }
+
+  private formatTweetMeta(meta: TweetMetaBlock): string {
+    const parts: string[] = [];
+    if (meta.likes > 0) parts.push(`❤️ ${meta.likes}`);
+    if (meta.retweets > 0) parts.push(`🔁 ${meta.retweets}`);
+    if (meta.replies > 0) parts.push(`💬 ${meta.replies}`);
+    if (meta.views > 0) parts.push(`👁️ ${meta.views}`);
+
+    return parts.length > 0
+      ? `\n\n---\n\n**互动数据**: ${parts.join(' | ')}\n`
+      : '';
   }
 }
