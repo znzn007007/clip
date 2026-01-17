@@ -39,14 +39,33 @@ describe('TwitterAdapter', () => {
   });
 
   describe('extract', () => {
+    const mockTweetHtml = `
+      <html>
+        <body>
+          <article data-testid="tweet">
+            <div data-testid="User-Name">
+              <a href="/testuser">
+                <span>Test User</span>
+              </a>
+            </div>
+            <div data-testid="tweetText">This is a test tweet</div>
+            <time datetime="2025-01-17T10:00:00Z">10:00 AM Jan 17, 2025</time>
+            <div data-testid="reply" aria-label="5 replies"></div>
+            <div data-testid="retweet" aria-label="10 reposts"></div>
+            <div data-testid="like" aria-label="100 likes"></div>
+            <img src="https://pbs.twimg.com/media/ABC123?format=jpg&name=medium" alt="Test image">
+          </article>
+        </body>
+      </html>
+    `;
+
     it('should extract basic document structure', async () => {
       const page: RenderedPage = {
         url: 'https://x.com/user/status/123456789',
         canonicalUrl: 'https://x.com/user/status/123456789',
-        title: 'Test Tweet',
-        html: '<html>test content</html>',
+        title: 'Post by @testuser',
+        html: mockTweetHtml,
         platform: 'twitter' as Platform,
-        screenshotPath: undefined,
       };
 
       const result = await adapter.extract(page);
@@ -55,23 +74,19 @@ describe('TwitterAdapter', () => {
       expect(result.doc.platform).toBe('twitter');
       expect(result.doc.sourceUrl).toBe(page.url);
       expect(result.doc.canonicalUrl).toBe(page.canonicalUrl);
-      expect(result.doc.title).toBe('Test Tweet');
       expect(result.doc.fetchedAt).toBeDefined();
       expect(result.doc.blocks).toBeDefined();
       expect(result.doc.blocks.length).toBeGreaterThan(0);
       expect(result.doc.assets).toBeDefined();
-      expect(result.doc.assets.images).toEqual([]);
     });
 
     it('should extract author from HTML', async () => {
-      const html = '{"screen_name":"testuser"}';
       const page: RenderedPage = {
-        url: 'https://x.com/user/status/123',
-        canonicalUrl: 'https://x.com/user/status/123',
-        title: 'Tweet',
-        html,
+        url: 'https://x.com/testuser/status/123',
+        canonicalUrl: 'https://x.com/testuser/status/123',
+        title: 'Post by @testuser',
+        html: mockTweetHtml,
         platform: 'twitter' as Platform,
-        screenshotPath: undefined,
       };
 
       const result = await adapter.extract(page);
@@ -80,12 +95,11 @@ describe('TwitterAdapter', () => {
 
     it('should return warnings array', async () => {
       const page: RenderedPage = {
-        url: 'https://x.com/user/status/123',
-        canonicalUrl: 'https://x.com/user/status/123',
-        title: 'Tweet',
-        html: '<html>test</html>',
+        url: 'https://x.com/testuser/status/123',
+        canonicalUrl: 'https://x.com/testuser/status/123',
+        title: 'Post by @testuser',
+        html: mockTweetHtml,
         platform: 'twitter' as Platform,
-        screenshotPath: undefined,
       };
 
       const result = await adapter.extract(page);
@@ -93,36 +107,120 @@ describe('TwitterAdapter', () => {
       expect(Array.isArray(result.warnings)).toBe(true);
     });
 
-    it('should handle missing author gracefully', async () => {
+    it('should extract tweet content and metrics', async () => {
       const page: RenderedPage = {
-        url: 'https://x.com/user/status/123',
-        canonicalUrl: 'https://x.com/user/status/123',
-        title: 'Tweet',
-        html: '<html>no author here</html>',
+        url: 'https://x.com/testuser/status/123',
+        canonicalUrl: 'https://x.com/testuser/status/123',
+        title: 'Post by @testuser',
+        html: mockTweetHtml,
         platform: 'twitter' as Platform,
-        screenshotPath: undefined,
       };
 
       const result = await adapter.extract(page);
-      expect(result.doc.author).toBeUndefined();
+
+      // Check that blocks were created
+      expect(result.doc.blocks.length).toBeGreaterThan(0);
+
+      // Check for paragraph block with tweet text
+      const paragraphBlock = result.doc.blocks.find((b: any) => b.type === 'paragraph');
+      expect(paragraphBlock).toBeDefined();
+      if (paragraphBlock && paragraphBlock.type === 'paragraph') {
+        expect(paragraphBlock.content).toContain('test tweet');
+      }
+
+      // Check images
+      expect(result.doc.assets.images.length).toBeGreaterThan(0);
+      expect(result.doc.assets.images[0].url).toContain('pbs.twimg.com');
     });
 
-    it('should create paragraph block for content', async () => {
+    it('should handle multiple tweets in thread', async () => {
+      const threadHtml = `
+        <html>
+          <body>
+            <article data-testid="tweet">
+              <div data-testid="User-Name">
+                <a href="/testuser"><span>Test User</span></a>
+              </div>
+              <div data-testid="tweetText">First tweet</div>
+              <time datetime="2025-01-17T10:00:00Z"></time>
+              <div data-testid="reply" aria-label="1 replies"></div>
+              <div data-testid="retweet" aria-label="2 reposts"></div>
+              <div data-testid="like" aria-label="10 likes"></div>
+            </article>
+            <article data-testid="tweet">
+              <div data-testid="User-Name">
+                <a href="/testuser"><span>Test User</span></a>
+              </div>
+              <div data-testid="tweetText">Second tweet</div>
+              <time datetime="2025-01-17T10:01:00Z"></time>
+              <div data-testid="reply" aria-label="0 replies"></div>
+              <div data-testid="retweet" aria-label="0 reposts"></div>
+              <div data-testid="like" aria-label="5 likes"></div>
+            </article>
+          </body>
+        </html>
+      `;
+
       const page: RenderedPage = {
-        url: 'https://x.com/user/status/123',
-        canonicalUrl: 'https://x.com/user/status/123',
-        title: 'Tweet',
-        html: '<html>test</html>',
+        url: 'https://x.com/testuser/status/123',
+        canonicalUrl: 'https://x.com/testuser/status/123',
+        title: 'Thread by @testuser',
+        html: threadHtml,
         platform: 'twitter' as Platform,
-        screenshotPath: undefined,
       };
 
       const result = await adapter.extract(page);
-      const block = result.doc.blocks[0];
-      expect(block.type).toBe('paragraph');
-      if (block.type === 'paragraph') {
-        expect(block.content).toBe('Content extraction to be implemented');
-      }
+
+      // Should have blocks for both tweets with separator
+      expect(result.doc.blocks.length).toBeGreaterThan(2);
+
+      // Check for separator
+      const separator = result.doc.blocks.find((b: any) => b.type === 'paragraph' && b.content === '---');
+      expect(separator).toBeDefined();
+    });
+
+    it('should extract from raw data when available', async () => {
+      const rawData = JSON.stringify({
+        tweets: [
+          {
+            id: '123456789',
+            text: 'Raw data tweet',
+            author: {
+              name: 'Test User',
+              screenName: 'testuser',
+              avatarUrl: 'https://example.com/avatar.jpg',
+            },
+            createdAt: '2025-01-17T10:00:00Z',
+            metrics: {
+              likes: 100,
+              retweets: 10,
+              replies: 5,
+              views: 1000,
+            },
+            media: [],
+            hashtags: ['#test'],
+            urls: [],
+          },
+        ],
+        metadata: {
+          extractedFrom: 'window_state' as const,
+          timestamp: '2025-01-17T10:00:00Z',
+        },
+      });
+
+      const page: RenderedPage = {
+        url: 'https://x.com/testuser/status/123456789',
+        canonicalUrl: 'https://x.com/testuser/status/123456789',
+        title: 'Post by @testuser',
+        html: mockTweetHtml,
+        platform: 'twitter' as Platform,
+        rawData,
+      };
+
+      const result = await adapter.extract(page);
+
+      expect(result.doc.author).toBe('@testuser');
+      expect(result.doc.blocks.length).toBeGreaterThan(0);
     });
   });
 });

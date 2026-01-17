@@ -1,5 +1,6 @@
 // src/core/render/types.ts
 import type { Platform } from '../types/index.js';
+import type { Page } from 'playwright';
 
 export interface RenderedPage {
   url: string;
@@ -10,6 +11,8 @@ export interface RenderedPage {
   rawData?: string;
   screenshotPath?: string;
   debugHtmlPath?: string;
+  debugDataPath?: string;  // Add debug data JSON path
+  page?: Page;  // Add page reference for advanced extraction
 }
 
 export interface RenderOptions {

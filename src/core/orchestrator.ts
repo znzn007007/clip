@@ -32,7 +32,7 @@ export class ClipOrchestrator {
       // Render
       const renderer = new PageRenderer(context);
       const page = await renderer.render(normalizedUrl, {
-        debug: false,
+        debug: options.debug ?? false,
       });
 
       // Extract
