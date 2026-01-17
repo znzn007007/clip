@@ -6,6 +6,7 @@ import type { ClipDoc, Block } from '../../types/index.js';
 import { TwitterParser, type TweetData } from './twitter/parser.js';
 import { TwitterBlockBuilder } from './twitter/block-builder.js';
 import { TwitterExtractError } from './twitter/errors.js';
+import { TwitterDomExtractor } from './twitter/dom-extractor.js';
 import * as cheerio from 'cheerio';
 
 export class TwitterAdapter extends BaseAdapter {
@@ -14,6 +15,7 @@ export class TwitterAdapter extends BaseAdapter {
 
   private parser = new TwitterParser();
   private blockBuilder = new TwitterBlockBuilder();
+  private domExtractor = new TwitterDomExtractor();
 
   async extract(page: RenderedPage): Promise<ExtractResult> {
     const warnings: string[] = [];
