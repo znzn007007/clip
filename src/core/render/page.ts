@@ -1,13 +1,18 @@
 // src/core/render/page.ts
-import type { BrowserContext } from 'playwright';
+import type { BrowserContext, Page } from 'playwright';
 import type { RenderedPage, RenderOptions } from './types.js';
-import { detectPlatform } from './utils.js';
+import { detectPlatform, isValidUrl } from './utils.js';
 import { DEFAULT_TIMEOUT, DEFAULT_MAX_SCROLLS } from '../config/constants.js';
 
 export class PageRenderer {
   constructor(private context: BrowserContext) {}
 
   async render(url: string, options: RenderOptions = {}): Promise<RenderedPage> {
+    // Validate URL first
+    if (!isValidUrl(url)) {
+      throw new Error(`Invalid URL: ${url}`);
+    }
+
     const timeout = options.timeout ?? DEFAULT_TIMEOUT;
     const maxScrolls = options.maxScrolls ?? DEFAULT_MAX_SCROLLS;
 
@@ -60,7 +65,7 @@ export class PageRenderer {
     }
   }
 
-  private async handleTwitter(page: any, maxScrolls: number): Promise<void> {
+  private async handleTwitter(page: Page, maxScrolls: number): Promise<void> {
     // For Twitter/X, scroll to load thread content
     let scrollCount = 0;
     let previousHeight = 0;
@@ -84,9 +89,9 @@ export class PageRenderer {
     await page.evaluate(() => window.scrollTo(0, 0));
   }
 
-  private async extractCanonicalUrl(page: any): Promise<string | undefined> {
+  private async extractCanonicalUrl(page: Page): Promise<string | undefined> {
     try {
-      return await page.$eval('link[rel="canonical"]', (el: any) => el.href);
+      return await page.$eval('link[rel="canonical"]', (el: HTMLAnchorElement) => el.href);
     } catch {
       return undefined;
     }
