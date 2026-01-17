@@ -37,6 +37,8 @@ export class PageRenderer {
       let rawData: string | undefined;
       if (platform === 'twitter') {
         rawData = await this.extractTwitterRawData(page);
+      } else if (platform === 'zhihu') {
+        rawData = await this.extractZhihuRawData(page);
       }
 
       if (platform === 'twitter') {
@@ -107,6 +109,30 @@ export class PageRenderer {
         for (const script of scripts) {
           const text = script.textContent || '';
           if (text.includes('tweet') && text.includes('result')) {
+            const match = text.match(/({.*})/);
+            if (match) return match[0];
+          }
+        }
+        return undefined;
+      });
+      return data;
+    } catch {
+      return undefined;
+    }
+  }
+
+  private async extractZhihuRawData(page: Page): Promise<string | undefined> {
+    try {
+      const data = await page.evaluate(() => {
+        // Try to extract from __STATE__ or similar
+        const state = (window as any).__INITIAL_STATE__;
+        if (state) return JSON.stringify(state);
+
+        // Fallback: extract from script tags
+        const scripts = document.querySelectorAll('script');
+        for (const script of scripts) {
+          const text = script.textContent || '';
+          if (text.includes('question') && text.includes('answer')) {
             const match = text.match(/({.*})/);
             if (match) return match[0];
           }
