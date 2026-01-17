@@ -25,16 +25,16 @@ export function registerOnceCommand(program: Command): void {
           json: options.json,
         });
 
+        if (options.json) {
+          console.log(JSON.stringify(result, null, 2));
+        }
+
         if (result.status === 'success') {
           console.log('Exported to:', result.paths?.markdownPath);
           console.log('Images:', result.stats?.imageCount);
         } else {
           console.error('Failed:', result.diagnostics?.error?.message);
           process.exit(1);
-        }
-
-        if (options.json) {
-          console.log(JSON.stringify(result, null, 2));
         }
       } catch (error) {
         console.error('Error:', error instanceof Error ? error.message : error);

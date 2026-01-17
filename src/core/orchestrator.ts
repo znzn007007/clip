@@ -6,7 +6,7 @@ import { MarkdownGenerator } from './export/markdown.js';
 import { AssetDownloader } from './export/assets.js';
 import { buildExportResult } from './export/json.js';
 import { isValidUrl, normalizeUrl } from './render/utils.js';
-import { ClipError, ErrorCode } from './errors.js';
+import { ClipError, ErrorCode, createExportResult } from './errors.js';
 import type { ExportOptions, ExportResult } from './export/types.js';
 import { generateOutputPaths } from './export/path.js';
 
@@ -49,10 +49,13 @@ export class ClipOrchestrator {
       );
 
       // Download assets
-      const assetMapping = await assetDownloader.downloadImages(
-        doc.assets.images,
-        assetsDir
-      );
+      let assetMapping = new Map<string, string>();
+      if (options.downloadAssets) {
+        assetMapping = await assetDownloader.downloadImages(
+          doc.assets.images,
+          assetsDir
+        );
+      }
 
       // Generate markdown
       await markdownGen.generate(doc, options.outputDir, assetMapping);
@@ -66,19 +69,7 @@ export class ClipOrchestrator {
       return buildExportResult(doc, { markdownPath, assetsDir }, stats);
     } catch (error) {
       if (error instanceof ClipError) {
-        return {
-          status: 'failed',
-          platform: 'unknown',
-          diagnostics: {
-            warnings: [],
-            error: {
-              code: error.code,
-              message: error.message,
-              retryable: error.retryable,
-              suggestion: error.suggestion,
-            },
-          },
-        };
+        return createExportResult(error);
       }
 
       throw error;
