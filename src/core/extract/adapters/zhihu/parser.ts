@@ -1,5 +1,4 @@
 import * as cheerio from 'cheerio';
-import type { AnyNode } from 'domhandler';
 
 export interface ZhihuData {
   type: 'article' | 'answer';
@@ -30,12 +29,19 @@ export class ZhihuParser {
    * Parse from Cheerio
    */
   parseFromCheerio($: cheerio.CheerioAPI, url: string): ZhihuData {
-    const isAnswer = /\/question\/\d+\/answer\/\d+/.test(url);
-
-    if (isAnswer) {
-      return this.parseAnswer($, url);
+    try {
+      const isAnswer = /\/question\/\d+\/answer\/\d+/.test(url);
+      return isAnswer ? this.parseAnswer($, url) : this.parseArticle($, url);
+    } catch (error) {
+      // Return basic fallback with error info
+      return {
+        type: 'article',
+        content: '',
+        author: { name: 'Unknown', url: '' },
+        publishedAt: new Date().toISOString(),
+        images: [],
+      };
     }
-    return this.parseArticle($, url);
   }
 
   private parseAnswer($: cheerio.CheerioAPI, _url: string): ZhihuData {
@@ -57,7 +63,9 @@ export class ZhihuParser {
     const images: string[] = [];
     $('.RichContent-inner img').each((_, img) => {
       const src = $(img).attr('src');
-      if (src) images.push(this.toHighRes(src));
+      if (src && !src.includes('avatar')) {
+        images.push(this.toHighRes(src));
+      }
     });
 
     return {
