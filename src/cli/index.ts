@@ -2,6 +2,7 @@
 
 import { Command } from 'commander';
 import { registerOnceCommand } from './commands/once.js';
+import { registerInstallBrowsersCommand } from './commands/install-browsers.js';
 
 const program = new Command();
 
@@ -10,6 +11,7 @@ program
   .description('Local content archiver')
   .version('0.1.0');
 
+registerInstallBrowsersCommand(program);
 registerOnceCommand(program);
 
 program.parse();
