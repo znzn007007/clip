@@ -10,7 +10,7 @@
 
 ---
 
-## Task 1: Create Zhihu Directory Structure
+## Task 1: Create Zhihu Directory Structure ✅
 
 **Files:**
 - Create: `src/core/extract/adapters/zhihu/`
@@ -45,7 +45,7 @@ git commit -m "feat(zhihu): create directory structure for Zhihu adapter"
 
 ---
 
-## Task 2: Create ZhihuExtractError
+## Task 2: Create ZhihuExtractError ✅
 
 **Files:**
 - Modify: `src/core/extract/adapters/zhihu/errors.ts`
@@ -82,7 +82,7 @@ git commit -m "feat(zhihu): add ZhihuExtractError class"
 
 ---
 
-## Task 3: Create ZhihuHtmlToBlocks
+## Task 3: Create ZhihuHtmlToBlocks ✅
 
 **Files:**
 - Modify: `src/core/extract/adapters/zhihu/html-to-blocks.ts`
@@ -205,7 +205,7 @@ git commit -m "feat(zhihu): add ZhihuHtmlToBlocks for HTML to Block conversion"
 
 ---
 
-## Task 4: Create ZhihuParser
+## Task 4: Create ZhihuParser ✅
 
 **Files:**
 - Modify: `src/core/extract/adapters/zhihu/parser.ts`
@@ -346,7 +346,7 @@ git commit -m "feat(zhihu): add ZhihuParser with Cheerio extraction"
 
 ---
 
-## Task 5: Create ZhihuAdapter
+## Task 5: Create ZhihuAdapter ✅
 
 **Files:**
 - Modify: `src/core/extract/adapters/zhihu/index.ts`
@@ -463,7 +463,7 @@ git commit -m "feat(zhihu): implement ZhihuAdapter with dual-path parsing"
 
 ---
 
-## Task 6: Register ZhihuAdapter
+## Task 6: Register ZhihuAdapter ✅
 
 **Files:**
 - Modify: `src/core/extract/registry.ts`
@@ -500,7 +500,7 @@ git commit -m "feat(zhihu): register ZhihuAdapter in registry"
 
 ---
 
-## Task 7: Update PageRenderer for Zhihu
+## Task 7: Update PageRenderer for Zhihu ✅
 
 **Files:**
 - Modify: `src/core/render/page.ts`
@@ -562,7 +562,7 @@ git commit -m "feat(render): add Zhihu raw data extraction"
 
 ---
 
-## Task 8: End-to-End Testing
+## Task 8: End-to-End Testing ✅
 
 **Files:**
 - (No new files, use existing CLI)
