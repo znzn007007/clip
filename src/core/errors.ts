@@ -1,6 +1,8 @@
 // src/core/errors.ts
 import { ErrorCode } from './export/types.js';
 
+export { ErrorCode } from './export/types.js';
+
 export class ClipError extends Error {
   code: ErrorCode;
   retryable: boolean;
