@@ -64,8 +64,37 @@ export class TwitterAdapter extends BaseAdapter {
     const $ = cheerio.load(page.html);
     const tweets: TweetData[] = [];
 
+    // Check what elements exist in HTML
+    const articleCount = $('article').length;
+    const dataTestIdCount = $('[data-testid]').length;
+
+    // List all data-testid values found
+    const testIds: string[] = [];
+    $('[data-testid]').each((_, el) => {
+      const id = $(el).attr('data-testid');
+      if (id && !testIds.includes(id)) {
+        testIds.push(id);
+      }
+    });
+
+    const tweetTestIdCount = $('[data-testid="tweet"]').length;
+    const bodyText = $('body').text().slice(0, 500);
+
+    console.error(`[DEBUG] article elements: ${articleCount}`);
+    console.error(`[DEBUG] [data-testid] elements: ${dataTestIdCount}`);
+    console.error(`[DEBUG] data-testid values found: ${testIds.join(', ')}`);
+    console.error(`[DEBUG] [data-testid="tweet"] elements: ${tweetTestIdCount}`);
+    console.error(`[DEBUG] HTML length: ${page.html.length}`);
+    console.error(`[DEBUG] Body text preview: ${bodyText}`);
+
+    // Check for common Twitter patterns
+    const hasSignin = $('body').text().toLowerCase().includes('sign in') || $('body').text().toLowerCase().includes('log in');
+    const hasAuth = $('body').text().toLowerCase().includes('verify') || $('body').text().toLowerCase().includes('authorized') || $('body').text().toLowerCase().includes('suspended');
+    console.error(`[DEBUG] Has sign-in wall: ${hasSignin}, auth required: ${hasAuth}`);
+
     // Extract all tweets from same author
-    $('article[data-testid="tweet"]').each((_, el) => {
+    const tweetElements = $('article[data-testid="tweet"]');
+    tweetElements.each((_, el) => {
       tweets.push(this.parser.parseFromCheerio($, el));
     });
 

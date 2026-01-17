@@ -1,4 +1,5 @@
 import * as cheerio from 'cheerio';
+import { ZhihuExtractError } from './errors.js';
 
 export interface ZhihuData {
   type: 'article' | 'answer';
@@ -29,6 +30,23 @@ export class ZhihuParser {
    * Parse from Cheerio
    */
   parseFromCheerio($: cheerio.CheerioAPI, url: string): ZhihuData {
+    // Check for Zhihu rate limit / anti-bot error
+    const html = $.html();
+    const errorMatch = html.match(/\{"error":\{"message":"([^"]+)","code":(\d+)\}\}/);
+    if (errorMatch) {
+      const [, message, code] = errorMatch;
+      if (code === '40362') {
+        throw new ZhihuExtractError(
+          'Zhihu is blocking automated access. The request was flagged as unusual.',
+          'RATE_LIMITED'
+        );
+      }
+      throw new ZhihuExtractError(
+        `Zhihu returned an error: ${message}`,
+        'CONTENT_NOT_FOUND'
+      );
+    }
+
     try {
       const isAnswer = /\/question\/\d+\/answer\/\d+/.test(url);
       return isAnswer ? this.parseAnswer($, url) : this.parseArticle($, url);

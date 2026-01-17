@@ -34,6 +34,10 @@ export class ZhihuAdapter extends BaseAdapter {
       const data = this.parser.parseFromCheerio(cheerio.load(page.html), page.url);
       return { doc: this.buildDoc(data, page), warnings: ['Used HTML fallback parsing'] };
     } catch (error) {
+      // Re-throw ZhihuExtractError as-is to preserve error code
+      if (error instanceof ZhihuExtractError) {
+        throw error;
+      }
       throw new ZhihuExtractError(
         'Zhihu parsing failed',
         'PARSE_FAILED',

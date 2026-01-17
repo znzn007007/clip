@@ -5,3 +5,4 @@ clips/
 .DS_Store
 .env
 tmpclaude-*
+.worktrees/
