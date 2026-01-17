@@ -169,10 +169,12 @@ export class TwitterParser {
   private extractMedia($: cheerio.CheerioAPI, $el: cheerio.Cheerio<any>): TweetData['media'] {
     const media: TweetData['media'] = [];
 
-    $el.find('img[src*="media"]').each((_, img) => {
+    // Priority 1: Extract pbs.twimg.com images
+    $el.find('img[src*="pbs.twimg.com"]').each((_, img) => {
       const $img = $(img);
       const url = $img.attr('src');
       if (url && !url.includes('profile_images')) {
+        // Get original quality
         const highResUrl = url.replace(/&name=\w+/, '&name=orig');
         media.push({
           type: 'image',
@@ -182,6 +184,22 @@ export class TwitterParser {
       }
     });
 
+    // Priority 2: Other media images (as backup)
+    $el.find('img[src*="media"]').each((_, img) => {
+      const $img = $(img);
+      const url = $img.attr('src');
+      // Only add if not already added from pbs.twimg.com
+      if (url && !url.includes('pbs.twimg.com') && !url.includes('profile_images')) {
+        const highResUrl = url.replace(/&name=\w+/, '&name=orig');
+        media.push({
+          type: 'image',
+          url: highResUrl,
+          alt: $img.attr('alt') || '',
+        });
+      }
+    });
+
+    // Priority 3: Videos
     $el.find('video').each((_, video) => {
       const $video = $(video);
       const poster = $video.attr('poster');
