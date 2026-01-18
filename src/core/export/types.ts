@@ -37,7 +37,7 @@ export interface ExportResult {
   };
   stats?: ExportStats;
   diagnostics?: {
-    warnings: string[];
+    warnings?: string[];
     error?: ExportError;
     assetFailures?: DownloadError[];
   };

@@ -1,12 +1,21 @@
 // src/core/export/json.ts
 import type { ExportResult, ExportPaths, ExportStats } from './types.js';
 import type { ClipDoc } from '../types/index.js';
+import type { DownloadError } from './assets.js';
 
 export function buildExportResult(
   doc: ClipDoc,
   paths: ExportPaths,
-  stats: ExportStats
+  stats: ExportStats,
+  assetFailures?: DownloadError[]
 ): ExportResult {
+  // Build diagnostics object conditionally
+  const diagnostics: ExportResult['diagnostics'] = {};
+
+  if (assetFailures && assetFailures.length > 0) {
+    diagnostics.assetFailures = assetFailures;
+  }
+
   return {
     status: 'success',
     platform: doc.platform,
@@ -19,9 +28,7 @@ export function buildExportResult(
       fetchedAt: doc.fetchedAt,
     },
     stats,
-    diagnostics: {
-      warnings: [],
-    },
+    diagnostics: Object.keys(diagnostics).length > 0 ? diagnostics : undefined,
   };
 }
 
