@@ -11,7 +11,7 @@ export function registerOnceCommand(program: Command): void {
     .option('--format <format>', 'Output format (md|md+html)', 'md' as ExportFormat)
     .option('--json', 'Output JSON to stdout', false)
     .option('--debug', 'Save debug artifacts', false)
-    .option('--no-assets', 'Skip asset downloads', false)
+    .option('--no-assets', 'Skip asset downloads')
     .option('--cdp <endpoint>', 'Connect to existing browser via CDP (e.g., http://localhost:9222)')
     .action(async (url: string, options) => {
       const orchestrator = new ClipOrchestrator(

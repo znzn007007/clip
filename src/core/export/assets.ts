@@ -116,24 +116,22 @@ export class AssetDownloader {
   }
 
   private async tryFetchDownload(url: string, filepath: string): Promise<void> {
-    // Create a temporary page for fetch injection
-    const page = await this.context.newPage();
-    try {
-      // Use page.evaluate to run fetch in browser context (preserves cookies)
-      const bufferArray = await page.evaluate(async (fetchUrl) => {
-        const response = await fetch(fetchUrl);
-        if (!response.ok) {
-          throw new Error(`HTTP ${response.status}`);
-        }
-        const blob = await response.blob();
-        const arrayBuffer = await blob.arrayBuffer();
-        return Array.from(new Uint8Array(arrayBuffer));
-      }, url);
+    // Use BrowserContext.request API for direct HTTP requests with proper headers
+    const response = await this.context.request.get(url, {
+      headers: {
+        // Add common headers to avoid hotlink protection
+        'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      }
+    });
 
-      await fs.writeFile(filepath, Buffer.from(bufferArray));
-    } finally {
-      await page.close();
+    if (!response.ok()) {
+      throw new Error(`HTTP ${response.status()}`);
     }
+
+    const buffer = await response.body();
+    await fs.writeFile(filepath, buffer);
   }
 
   private async downloadWithRetry(

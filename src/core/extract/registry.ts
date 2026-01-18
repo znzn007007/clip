@@ -2,11 +2,13 @@
 import type { Adapter } from './types.js';
 import { TwitterAdapter } from './adapters/twitter.js';
 import { ZhihuAdapter } from './adapters/zhihu/index.js';
+import { WeChatAdapter } from './adapters/wechat/index.js';
 
 export class AdapterRegistry {
   private adapters: Adapter[] = [
     new TwitterAdapter(),
     new ZhihuAdapter(),
+    new WeChatAdapter(),
   ];
 
   select(url: string): Adapter {
