@@ -1,6 +1,7 @@
 // src/core/batch/__tests__/runner.test.ts
 import { BatchRunner } from '../runner.js';
 import { ClipOrchestrator } from '../../orchestrator.js';
+import { ClipError } from '../../errors.js';
 
 // Mock ClipOrchestrator
 jest.mock('../../orchestrator.js');
@@ -83,6 +84,12 @@ describe('BatchRunner', () => {
   });
 
   describe('run', () => {
+    it('should throw error when source is file but filePath is missing', async () => {
+      await expect(
+        runner['parseUrls']('file', undefined)
+      ).rejects.toThrow(ClipError);
+    });
+
     it('should return empty summary when no URLs provided', async () => {
       // Mock parseUrls to return empty array
       jest.spyOn(runner as any, 'parseUrls').mockResolvedValue([]);

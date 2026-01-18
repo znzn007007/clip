@@ -1,6 +1,8 @@
 // src/core/batch/runner.ts
 import { readFile } from 'node:fs/promises';
 import { ClipOrchestrator } from '../orchestrator.js';
+import { ClipError } from '../errors.js';
+import { ErrorCode } from '../export/types.js';
 import type { ExportOptions, ExportResult } from '../export/types.js';
 
 // Helper function to read from stdin (extracted for testability)
@@ -20,6 +22,8 @@ export interface BatchOptions {
   outputDir: string;
   format: 'md' | 'md+html';
   downloadAssets: boolean;
+  json?: boolean;
+  debug?: boolean;
   cdpEndpoint?: string;
 }
 
@@ -49,11 +53,13 @@ export class BatchRunner {
     const failures: Array<{ url: string; error: string }> = [];
     let successCount = 0;
 
-    const orchestrator = new ClipOrchestrator(
-      options.cdpEndpoint ? { cdpEndpoint: options.cdpEndpoint } : undefined
-    );
-
     for (const url of urls) {
+      // Create a new orchestrator for each URL to ensure clean browser state
+      // This is necessary because ClipOrchestrator.archive() calls browserManager.close()
+      const orchestrator = new ClipOrchestrator(
+        options.cdpEndpoint ? { cdpEndpoint: options.cdpEndpoint } : undefined
+      );
+
       try {
         const result = await this.processUrl(url, orchestrator, options);
         if (options.jsonl) {
@@ -100,8 +106,18 @@ export class BatchRunner {
     let content: string;
 
     if (source === 'file') {
-      content = await readFile(filePath ?? '', 'utf-8');
+      if (!filePath) {
+        throw new ClipError(
+          ErrorCode.INVALID_URL,
+          'File path is required when source is "file"'
+        );
+      }
+      content = await readFile(filePath, 'utf-8');
     } else {
+      // Note: stdin reading is tested via integration tests rather than unit tests
+      // due to the complexity of mocking process.stdin in Jest with ESM mode.
+      // The readStdin() function implementation is straightforward and will be
+      // verified through manual and integration testing.
       content = await readStdin();
     }
 
@@ -120,8 +136,8 @@ export class BatchRunner {
       outputDir: options.outputDir,
       format: options.format,
       downloadAssets: options.downloadAssets,
-      json: false,
-      debug: false,
+      json: options.json ?? false,
+      debug: options.debug ?? false,
     };
 
     return await orchestrator.archive(url, exportOptions);
