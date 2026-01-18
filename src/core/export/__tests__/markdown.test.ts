@@ -56,7 +56,9 @@ describe('MarkdownGenerator', () => {
 
     it('should use asset mapping for images', async () => {
       const { generateOutputPaths, buildFrontMatter } = await import('../path.js');
-      const assetMapping = new Map([['http://example.com/image.jpg', './assets/001.jpg']]);
+      const assetMapping = new Map([
+        ['http://example.com/image.jpg', { status: 'success' as const, path: './assets/001.jpg', attempts: 1 }]
+      ]);
       const mockDoc = createMockDoc([
         { type: 'image', url: 'http://example.com/image.jpg', alt: 'Test Image' },
       ]);
@@ -159,7 +161,9 @@ describe('MarkdownGenerator', () => {
         url: 'http://example.com/image.jpg',
         alt: 'Test Image',
       };
-      const assetMapping = new Map([['http://example.com/image.jpg', './assets/001.jpg']]);
+      const assetMapping = new Map([
+        ['http://example.com/image.jpg', { status: 'success' as const, path: './assets/001.jpg', attempts: 1 }]
+      ]);
       const result = (generator as any).blockToMarkdown(image, assetMapping);
       expect(result).toBe('![Test Image](./assets/001.jpg)');
     });
@@ -180,7 +184,9 @@ describe('MarkdownGenerator', () => {
         url: 'https://example.com/video.mp4',
         thumbnail: 'https://example.com/thumb.jpg',
       };
-      const assetMapping = new Map([['https://example.com/thumb.jpg', './assets/001.jpg']]);
+      const assetMapping = new Map([
+        ['https://example.com/thumb.jpg', { status: 'success' as const, path: './assets/001.jpg', attempts: 1 }]
+      ]);
       const result = (generator as any).blockToMarkdown(video, assetMapping);
       expect(result).toBe('[视频: 已截图](./assets/001.jpg)\n\n[视频链接](https://example.com/video.mp4)');
     });

@@ -9,8 +9,10 @@ export function buildExportResult(
   stats: ExportStats,
   assetFailures?: DownloadError[]
 ): ExportResult {
-  // Build diagnostics object conditionally
-  const diagnostics: ExportResult['diagnostics'] = {};
+  // Build diagnostics object - always include with empty warnings array
+  const diagnostics: ExportResult['diagnostics'] = {
+    warnings: [],
+  };
 
   if (assetFailures && assetFailures.length > 0) {
     diagnostics.assetFailures = assetFailures;
@@ -28,7 +30,7 @@ export function buildExportResult(
       fetchedAt: doc.fetchedAt,
     },
     stats,
-    diagnostics: Object.keys(diagnostics).length > 0 ? diagnostics : undefined,
+    diagnostics,
   };
 }
 

@@ -208,3 +208,121 @@ node dist/cli/index.js once "https://zhuanlan.zhihu.com/p/..."
 2. **高优先级:** 实现 CDP 连接功能
 3. **中优先级:** 实现图片下载功能
 4. **后续工作:** 根据需求决定是否实现微信公众号适配器
+
+---
+
+## Task 9: 测试套件验证 ✅ 已完成
+
+### 执行时间
+2026-01-18
+
+### 测试结果
+
+#### 1. 单元测试 (npm test)
+**状态:** ✅ 全部通过 (97/97)
+
+```
+Test Suites: 7 passed, 7 total
+Tests:       97 passed, 97 total
+Snapshots:   0 total
+Time:        8.538 s
+```
+
+**修复的问题:**
+- **JSON 测试失败:** `buildExportResult` 的 `diagnostics` 字段未初始化
+  - 修复: 始终返回包含空 `warnings` 数组的 `diagnostics` 对象
+- **Markdown 测试类型错误:** 测试中使用 `Map<string, string>` 但函数期望 `Map<string, DownloadResult>`
+  - 修复: 更新测试 mock 数据使用正确的 `DownloadResult` 类型结构
+
+#### 2. 构建验证 (npm run build)
+**状态:** ✅ 成功
+
+TypeScript 编译无错误，所有类型检查通过。
+
+#### 3. 手动测试流程文档
+
+由于自动化环境限制（需要网络访问和浏览器），手动测试流程如下：
+
+##### 测试命令
+```bash
+# 构建项目
+npm run build
+
+# 运行单次抓取（包含图片下载）
+node dist/cli/index.js once "https://x.com/user/status/123" --download-assets
+
+# 或测试知乎
+node dist/cli/index.js once "https://www.zhihu.com/question/592327756/answer/3379516907" --download-assets
+```
+
+##### 验证点
+1. **输出目录:** 检查是否生成了 `output/` 目录
+2. **Markdown 文件:**
+   - 文件存在且格式正确
+   - 图片路径为本地路径 `./assets/001.jpg` 或原始 URL（如果下载失败）
+   - 包含 front matter 元数据
+3. **Assets 目录:**
+   - `output/assets/` 目录存在
+   - 图片文件已下载（如果成功）
+4. **失败提示:** 如果有图片下载失败，markdown 末尾应包含失败列表
+
+##### 预期结果示例
+
+**成功情况:**
+```markdown
+---
+title: "推文标题"
+author: "@user"
+---
+
+推文内容...
+
+![图片描述](./assets/001.jpg)
+```
+
+**部分失败情况:**
+```markdown
+---
+title: "推文标题"
+author: "@user"
+---
+
+推文内容...
+
+![图片1](./assets/001.jpg)
+![图片2](https://example.com/image2.jpg)  # 原始 URL（下载失败）
+
+---
+
+## 图片下载提示
+
+部分图片使用在线链接：
+
+• 002.jpg (网络超时)
+```
+
+### 代码变更
+
+#### 修改的文件
+1. `src/core/export/json.ts`
+   - 始终初始化 `diagnostics` 对象，包含空 `warnings` 数组
+
+2. `src/core/export/__tests__/markdown.test.ts`
+   - 修复测试中的 `assetMapping` 类型，使用正确的 `DownloadResult` 结构
+
+### 自我审查
+
+**完整性:** ✅
+- 所有测试通过
+- 构建成功
+- 手动测试流程已文档化
+
+**质量:** ✅
+- 修复符合现有代码风格
+- 类型安全得到保证
+- 测试覆盖了修复的场景
+
+**纪律性:** ✅
+- 只修复了测试失败的问题
+- 没有添加不必要的功能
+- 遵循了现有模式
