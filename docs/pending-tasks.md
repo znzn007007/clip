@@ -171,92 +171,61 @@ $('.rich_media_meta_text')       // 作者/日期
 
 ---
 
-### 4. 队列系统实现 / Queue System Implementation
+### 4. 批量处理与队列系统 / Batch Processing & Queue System
 
-**优先级:** 🔴 P0 阻塞
+**优先级:** 🟡 P1 设计完成，待实现
 
-**问题描述:**
-批量归档需要队列管理、状态跟踪、失败重试。
+**状态:**
+- ✅ 设计文档: `docs/plans/2026-01-18-batch-processing-design.md`
+- ⏳ BatchRunner 实现中
+- ⏳ CLI 统一重构: `clip <url>` 代替 `clip`
+- ⏳ 批量处理: `clip --file urls.txt` 和 `clip --stdin`
+- ⏳ 队列管理 (clip queue add/list/run/clear) - 后续实现
+
+**设计决策:**
+- **CLI 统一**: `clip` → `clip <url>`，`clip run` → `clip --file`
+- **命令分组**: `clip queue` 子命令管理队列
+- **批量模式**: 临时内存队列，无需持久化
+- **失败处理**: `--continue-on-error` 用户可选
+- **输出**: JSONL 流式 + 汇总报告
+
+**CLI 结构:**
+```bash
+# 单个 URL（位置参数）
+clip https://x.com/user/status/123
+
+# 批量 URL
+clip --file urls.txt
+clip --stdin < urls.txt
+
+# 队列管理（后续实现）
+clip queue add <url>
+clip queue list
+clip queue run
+clip queue clear
+```
 
 **文件结构:**
 ```
-src/core/queue/
-├── index.ts           # QueueManager 主类
-├── storage.ts         # 持久化存储（JSON 文件或 SQLite）
-├── task.ts            # Task 任务模型
-└── errors.ts          # QueueError 错误类
-```
+src/core/batch/
+├── runner.ts           # BatchRunner 主类
+└── __tests__/
+    └── runner.test.ts  # 测试
 
-**任务状态:**
-```
-pending → running → success
-               └→ failed → pending (重试)
-```
-
-**CLI 命令:**
-```bash
-clip add <url>           # 添加到队列
-clip list                # 列出队列状态
-clip run                 # 执行队列
-clip retry-failed        # 重试失败任务
-clip clear               # 清空队列
+src/cli/commands/
+├── archive.ts          # 统一命令（原 once.ts）
+└── queue.ts            # 队列管理 stub
 ```
 
 **实现步骤:**
-1. 定义 Task 数据结构（url, status, retryCount, error）
-2. 实现 QueueManager（add, list, run, retry, clear）
-3. 持久化存储（`~/.clip/queue.json`）
-4. 并发控制（concurrency, rate）
-5. 错误处理和重试逻辑
+1. 创建 BatchRunner 类（URL 解析、串行执行、输出）
+2. 重构 once.ts → archive.ts（支持位置参数和 --file）
+3. 添加 queue.ts 命令 stub
+4. 集成测试和文档更新
 
 ---
 
-### 5. 批量归档功能 / Batch Archive Feature
-
-**优先级:** 🔴 P0 阻塞
-
-**问题描述:**
-`clip run` 命令支持从文件或 stdin 批量处理 URL。
-
-**文件:**
-- `src/cli/commands/run.ts`
-
-**CLI 选项:**
-```bash
-# 从文件读取
-clip run --file urls.txt
-
-# 从 stdin 读取
-cat urls.txt | clip run --stdin
-
-# 并发和限速
-clip run --file urls.txt --concurrency 2 --rate 1.5
-
-# JSONL 输出
-clip run --file urls.txt --jsonl > results.jsonl
-
-# 失败继续
-clip run --file urls.txt --continue-on-error
-```
-
-**实现步骤:**
-1. 解析 `--file` 或 `--stdin` 参数
-2. 逐行读取 URL（跳过空行和注释）
-3. 调用 ClipOrchestrator 处理每个 URL
-4. 实时输出进度和结果
-5. 支持 JSONL 流式输出
-
-**urls.txt 格式:**
-```
-https://x.com/user/status/123
-https://zhihu.com/question/456
-# 这是注释，会被跳过
-https://mp.weixin.qq.com/s/xxx
-```
-
----
-
-### 6. 去重逻辑实现 / Deduplication Logic
+### 5. 去重逻辑实现 / Deduplication Logic
 
 **优先级:** 🔴 P0 阻塞
 
@@ -295,52 +264,16 @@ if (hasArchived(normalized)) {
 
 **CLI 选项:**
 ```bash
-clip once "url"          # 遇到重复跳过
-clip once "url" --force  # 强制覆盖
-clip once "url" --version # 版本化保存 (v1, v2...)
+clip "url"          # 遇到重复跳过
+clip "url" --force  # 强制覆盖
+clip "url" --version # 版本化保存 (v1, v2...)
 ```
-
----
-
-### 7. JSONL 流式输出 / JSONL Stream Output
-
-**优先级:** 🔴 P0 阻塞
-
-**问题描述:**
-AI 工具链需要流式 JSONL 输出，便于逐条处理。
-
-**文件:**
-- `src/core/export/jsonl.ts`
-
-**JSONL 格式:**
-```jsonl
-{"status":"success","platform":"twitter","title":"Tweet 1","paths":{"markdown":"./twitter/..."}}
-{"status":"success","platform":"zhihu","title":"Answer 1","paths":{"markdown":"./zhihu/..."}}
-{"status":"failed","platform":"unknown","error":{"code":"extract_failed","message":"..."}}
-```
-
-**CLI 使用:**
-```bash
-# 单条输出 JSONL
-clip once "url" --jsonl
-
-# 批量输出
-clip run --file urls.txt --jsonl > results.jsonl
-
-# 流式处理
-clip run --file urls.txt --jsonl | jq '.title'
-```
-
-**实现步骤:**
-1. 定义 `formatJsonl(result: ExportResult): string`
-2. 支持 `--jsonl` CLI 参数
-3. 批量模式下逐行输出（不缓存全部结果）
 
 ---
 
 ## 常规待办任务
 
-### 8. 重构浏览器策略 / Refactor Browser Strategy
+### 6. 重构浏览器策略 / Refactor Browser Strategy
 
 **优先级:** 高 / High
 
@@ -370,12 +303,12 @@ clip run --file urls.txt --jsonl | jq '.title'
 **CLI 选项示例:**
 ```bash
 # 自动选择（默认）
-clip once "https://x.com/.../status/123"
+clip "https://x.com/.../status/123"
 
 # 指定浏览器
-clip once "https://x.com/...status/123" --browser chrome
-clip once "https://x.com/...status/123" --browser playwright
-clip once "https://x.com/...status/123" --browser edge
+clip "https://x.com/...status/123" --browser chrome
+clip "https://x.com/...status/123" --browser playwright
+clip "https://x.com/...status/123" --browser edge
 ```
 
 **考虑事项:**
@@ -385,7 +318,7 @@ clip once "https://x.com/...status/123" --browser edge
 
 ---
 
-### 9. 测试 CDP 连接功能 / Test CDP Connection
+### 7. 测试 CDP 连接功能 / Test CDP Connection
 
 **优先级:** 高 / High
 
@@ -397,8 +330,8 @@ clip once "https://x.com/...status/123" --browser edge
 2. 在 Edge 中登录 Zhihu 和 Twitter
 3. 测试命令:
    ```bash
-   node dist/cli/index.js once "https://www.zhihu.com/question/592327756/answer/3379516907" --cdp http://localhost:9222
-   node dist/cli/index.js once "https://x.com/thedankoe/status/2010042119121957316" --cdp http://localhost:9222
+   node dist/cli/index.js "https://www.zhihu.com/question/592327756/answer/3379516907" --cdp http://localhost:9222
+   node dist/cli/index.js "https://x.com/thedankoe/status/2010042119121957316" --cdp http://localhost:9222
    ```
 
 **预期结果:**
@@ -408,7 +341,7 @@ clip once "https://x.com/...status/123" --browser edge
 
 ---
 
-### 10. 配置文件支持 / Configuration File Support
+### 8. 配置文件支持 / Configuration File Support
 
 **优先级:** 高 / High
 
@@ -449,17 +382,17 @@ clip once "https://x.com/...status/123" --browser edge
 **CLI 优先级示例:**
 ```bash
 # 配置文件设置 outputDir: "./archive"
-clip once "url"
+clip "url"
 # → 输出到 ./archive/
 
 # CLI 参数覆盖
-clip once "url" --out "./custom"
+clip "url" --out "./custom"
 # → 输出到 ./custom/ (CLI 优先)
 ```
 
 ---
 
-### 11. 修复可能的 Zhihu 选择器问题 / Fix Zhihu Selectors if Needed
+### 9. 修复可能的 Zhihu 选择器问题 / Fix Zhihu Selectors if Needed
 
 **优先级:** 中 / Medium
 
@@ -488,7 +421,7 @@ $('.Post-RichText')
 
 ---
 
-### 12. 实现 parseFromRawState / Implement Raw State Parsing
+### 10. 实现 parseFromRawState / Implement Raw State Parsing
 
 **优先级:** 中 / Medium
 
@@ -504,7 +437,7 @@ $('.Post-RichText')
 
 ---
 
-### 13. 单元测试 / Unit Tests
+### 11. 单元测试 / Unit Tests
 
 **优先级:** 中 / Medium
 
@@ -522,7 +455,7 @@ $('.Post-RichText')
 
 ---
 
-### 14. 改进浏览器指纹 / Improve Browser Fingerprinting
+### 12. 改进浏览器指纹 / Improve Browser Fingerprinting
 
 **优先级:** 低 / Low
 
