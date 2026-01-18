@@ -1,9 +1,18 @@
 // src/core/batch/runner.ts
 import { readFile } from 'node:fs/promises';
-import { ClipOrchestrator } from '../orchestrator.js';
+import { BrowserManager } from '../render/browser.js';
+import { PageRenderer } from '../render/page.js';
+import { registry } from '../extract/registry.js';
+import { MarkdownGenerator } from '../export/markdown.js';
+import { AssetDownloader } from '../export/assets.js';
+import { buildExportResult } from '../export/json.js';
 import { ClipError } from '../errors.js';
 import { ErrorCode } from '../export/types.js';
 import type { ExportOptions, ExportResult } from '../export/types.js';
+import type { DownloadResult, DownloadError } from '../export/assets.js';
+import { generateOutputPaths } from '../export/path.js';
+import { isValidUrl, normalizeUrl } from '../render/utils.js';
+import { createExportResult } from '../errors.js';
 
 // Helper function to read from stdin (extracted for testability)
 async function readStdin(): Promise<string> {
@@ -53,37 +62,45 @@ export class BatchRunner {
     const failures: Array<{ url: string; error: string }> = [];
     let successCount = 0;
 
-    for (const url of urls) {
-      // Create a new orchestrator for each URL to ensure clean browser state
-      // This is necessary because ClipOrchestrator.archive() calls browserManager.close()
-      const orchestrator = new ClipOrchestrator(
-        options.cdpEndpoint ? { cdpEndpoint: options.cdpEndpoint } : undefined
-      );
+    // Create a single browser manager for all URLs
+    const browserManager = new BrowserManager(
+      undefined,
+      options.cdpEndpoint ? { cdpEndpoint: options.cdpEndpoint } : undefined
+    );
 
-      try {
-        const result = await this.processUrl(url, orchestrator, options);
-        if (options.jsonl) {
-          this.printJsonl(result);
-        }
-        if (result.status === 'success') {
-          successCount++;
-          console.log(`✓ ${url}`);
-        } else {
-          failures.push({
-            url,
-            error: result.diagnostics?.error?.message ?? 'Unknown error',
-          });
-          console.log(`✗ ${url} (${result.diagnostics?.error?.code})`);
-        }
-      } catch (error) {
-        const errorMsg = error instanceof Error ? error.message : String(error);
-        failures.push({ url, error: errorMsg });
-        console.log(`✗ ${url} (${errorMsg})`);
+    try {
+      // Launch browser once for all URLs
+      const context = await browserManager.launch(urls[0]);
 
-        if (!options.continueOnError) {
-          throw error;
+      for (const url of urls) {
+        try {
+          const result = await this.processUrl(url, context, options);
+          if (options.jsonl) {
+            this.printJsonl(result);
+          }
+          if (result.status === 'success') {
+            successCount++;
+            console.log(`✓ ${url}`);
+          } else {
+            failures.push({
+              url,
+              error: result.diagnostics?.error?.message ?? 'Unknown error',
+            });
+            console.log(`✗ ${url} (${result.diagnostics?.error?.code})`);
+          }
+        } catch (error) {
+          const errorMsg = error instanceof Error ? error.message : String(error);
+          failures.push({ url, error: errorMsg });
+          console.log(`✗ ${url} (${errorMsg})`);
+
+          if (!options.continueOnError) {
+            throw error;
+          }
         }
       }
+    } finally {
+      // Close browser after all URLs are processed
+      await browserManager.close();
     }
 
     const duration = Date.now() - startTime;
@@ -129,18 +146,64 @@ export class BatchRunner {
 
   private async processUrl(
     url: string,
-    orchestrator: ClipOrchestrator,
+    context: any,
     options: BatchOptions
   ): Promise<ExportResult> {
-    const exportOptions: ExportOptions = {
-      outputDir: options.outputDir,
-      format: options.format,
-      downloadAssets: options.downloadAssets,
-      json: options.json ?? false,
-      debug: options.debug ?? false,
-    };
+    // Validate URL
+    if (!isValidUrl(url)) {
+      throw new ClipError(ErrorCode.INVALID_URL, `Invalid URL: ${url}`);
+    }
 
-    return await orchestrator.archive(url, exportOptions);
+    const normalizedUrl = normalizeUrl(url);
+
+    try {
+      // Render
+      const renderer = new PageRenderer(context);
+      const page = await renderer.render(normalizedUrl, {
+        debug: options.debug ?? false,
+      });
+
+      // Extract
+      const adapter = registry.select(normalizedUrl);
+      const { doc } = await adapter.extract(page);
+
+      // Export
+      const markdownGen = new MarkdownGenerator();
+      const assetDownloader = new AssetDownloader(context);
+
+      const { markdownPath, assetsDir } = await generateOutputPaths(
+        doc,
+        options.outputDir
+      );
+
+      // Download assets
+      let assetMapping = new Map<string, DownloadResult>();
+      let assetFailures: DownloadError[] = [];
+      if (options.downloadAssets) {
+        assetMapping = await assetDownloader.downloadImages(
+          doc.assets.images,
+          assetsDir
+        );
+        assetFailures = assetDownloader.getFailures();
+      }
+
+      // Generate markdown (pass failures)
+      await markdownGen.generate(doc, options.outputDir, assetMapping, assetFailures);
+
+      // Build result
+      const stats = {
+        wordCount: doc.blocks.length,
+        imageCount: doc.assets.images.length,
+      };
+
+      return buildExportResult(doc, { markdownPath, assetsDir }, stats, assetFailures);
+    } catch (error) {
+      if (error instanceof ClipError) {
+        return createExportResult(error);
+      }
+
+      throw error;
+    }
   }
 
   private printJsonl(result: ExportResult): void {

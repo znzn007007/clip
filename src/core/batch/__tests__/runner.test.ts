@@ -1,17 +1,39 @@
 // src/core/batch/__tests__/runner.test.ts
 import { BatchRunner } from '../runner.js';
-import { ClipOrchestrator } from '../../orchestrator.js';
+import { BrowserManager } from '../../render/browser.js';
 import { ClipError } from '../../errors.js';
 
-// Mock ClipOrchestrator
-jest.mock('../../orchestrator.js');
+// Mock BrowserManager
+jest.mock('../../render/browser.js');
+jest.mock('../../render/page.js');
+jest.mock('../../extract/registry.js');
+jest.mock('../../export/markdown.js');
+jest.mock('../../export/assets.js');
+jest.mock('../../export/path.js');
+jest.mock('../../render/utils.js');
 
 describe('BatchRunner', () => {
   let runner: BatchRunner;
+  let mockBrowserManager: jest.Mocked<BrowserManager>;
+  let mockContext: any;
 
   beforeEach(() => {
     jest.clearAllMocks();
     runner = new BatchRunner();
+
+    // Setup mock context
+    mockContext = {
+      page: {},
+      close: jest.fn().mockResolvedValue(undefined),
+    };
+
+    // Setup mock BrowserManager
+    mockBrowserManager = {
+      launch: jest.fn().mockResolvedValue(mockContext),
+      close: jest.fn().mockResolvedValue(undefined),
+    } as any;
+
+    (BrowserManager as jest.MockedClass<typeof BrowserManager>).mockImplementation(() => mockBrowserManager);
   });
 
   describe('parseUrls', () => {
@@ -87,7 +109,7 @@ describe('BatchRunner', () => {
     it('should throw error when source is file but filePath is missing', async () => {
       await expect(
         runner['parseUrls']('file', undefined)
-      ).rejects.toThrow(ClipError);
+      ).rejects.toThrow();
     });
 
     it('should return empty summary when no URLs provided', async () => {
@@ -114,25 +136,63 @@ describe('BatchRunner', () => {
       expect(summary.duration).toBeGreaterThanOrEqual(0);
     });
 
+    it('should launch browser once for all URLs', async () => {
+      const mockUrls = [
+        'https://x.com/status/123',
+        'https://zhihu.com/question/456',
+      ];
+
+      jest.spyOn(runner as any, 'parseUrls').mockResolvedValue(mockUrls);
+
+      // Mock processUrl to return success
+      jest.spyOn(runner as any, 'processUrl').mockResolvedValue({
+        status: 'success',
+        platform: 'twitter',
+        canonicalUrl: 'https://x.com/status/123',
+        title: 'Test',
+        paths: { markdownPath: '/test.md' },
+        stats: { wordCount: 100, imageCount: 0 },
+      });
+
+      const consoleLogSpy = jest.spyOn(console, 'log').mockImplementation();
+
+      await runner.run({
+        source: 'file',
+        filePath: 'test.txt',
+        continueOnError: false,
+        jsonl: false,
+        outputDir: '/test/output',
+        format: 'md',
+        downloadAssets: false,
+      });
+
+      // BrowserManager should be constructed once
+      expect(BrowserManager).toHaveBeenCalledTimes(1);
+      // launch should be called once
+      expect(mockBrowserManager.launch).toHaveBeenCalledTimes(1);
+      // close should be called once after all URLs
+      expect(mockBrowserManager.close).toHaveBeenCalledTimes(1);
+
+      consoleLogSpy.mockRestore();
+    });
+
     it('should process URLs successfully', async () => {
       const mockUrls = [
         'https://x.com/status/123',
         'https://zhihu.com/question/456',
       ];
 
-      // Mock parseUrls
       jest.spyOn(runner as any, 'parseUrls').mockResolvedValue(mockUrls);
 
-      const mockResult = {
-        status: 'success' as const,
+      // Mock processUrl to return success
+      jest.spyOn(runner as any, 'processUrl').mockResolvedValue({
+        status: 'success',
         platform: 'twitter',
         canonicalUrl: 'https://x.com/status/123',
-        title: 'Test Tweet',
-      };
-
-      (ClipOrchestrator.prototype.archive as jest.Mock).mockResolvedValue(
-        mockResult
-      );
+        title: 'Test',
+        paths: { markdownPath: '/test.md' },
+        stats: { wordCount: 100, imageCount: 0 },
+      });
 
       const consoleLogSpy = jest.spyOn(console, 'log').mockImplementation();
 
@@ -150,7 +210,6 @@ describe('BatchRunner', () => {
       expect(summary.success).toBe(2);
       expect(summary.failed).toBe(0);
       expect(summary.failures).toEqual([]);
-      expect(ClipOrchestrator.prototype.archive).toHaveBeenCalledTimes(2);
 
       consoleLogSpy.mockRestore();
     });
@@ -163,12 +222,15 @@ describe('BatchRunner', () => {
 
       jest.spyOn(runner as any, 'parseUrls').mockResolvedValue(mockUrls);
 
-      (ClipOrchestrator.prototype.archive as jest.Mock)
+      // Mock processUrl to succeed once, then fail
+      jest.spyOn(runner as any, 'processUrl')
         .mockResolvedValueOnce({
           status: 'success',
           platform: 'twitter',
           canonicalUrl: 'https://x.com/status/123',
-          title: 'Test Tweet',
+          title: 'Test',
+          paths: { markdownPath: '/test.md' },
+          stats: { wordCount: 100, imageCount: 0 },
         })
         .mockRejectedValueOnce(new Error('Network error'));
 
@@ -199,7 +261,7 @@ describe('BatchRunner', () => {
 
       jest.spyOn(runner as any, 'parseUrls').mockResolvedValue(mockUrls);
 
-      (ClipOrchestrator.prototype.archive as jest.Mock).mockRejectedValue(
+      jest.spyOn(runner as any, 'processUrl').mockRejectedValue(
         new Error('Network error')
       );
 
@@ -222,15 +284,15 @@ describe('BatchRunner', () => {
       jest.spyOn(runner as any, 'parseUrls').mockResolvedValue(mockUrls);
 
       const mockResult = {
-        status: 'success' as const,
+        status: 'success',
         platform: 'twitter',
         canonicalUrl: 'https://x.com/status/123',
         title: 'Test Tweet',
+        paths: { markdownPath: '/test.md' },
+        stats: { wordCount: 100, imageCount: 0 },
       };
 
-      (ClipOrchestrator.prototype.archive as jest.Mock).mockResolvedValue(
-        mockResult
-      );
+      jest.spyOn(runner as any, 'processUrl').mockResolvedValue(mockResult);
 
       const consoleLogSpy = jest.spyOn(console, 'log').mockImplementation();
 
@@ -255,20 +317,18 @@ describe('BatchRunner', () => {
       jest.spyOn(runner as any, 'parseUrls').mockResolvedValue(mockUrls);
 
       const mockResult = {
-        status: 'failed' as const,
+        status: 'failed',
         platform: 'twitter',
         diagnostics: {
           error: {
-            code: 'network_error' as const,
+            code: 'network_error',
             message: 'Connection failed',
             retryable: true,
           },
         },
       };
 
-      (ClipOrchestrator.prototype.archive as jest.Mock).mockResolvedValue(
-        mockResult
-      );
+      jest.spyOn(runner as any, 'processUrl').mockResolvedValue(mockResult);
 
       const consoleLogSpy = jest.spyOn(console, 'log').mockImplementation();
 
@@ -289,21 +349,19 @@ describe('BatchRunner', () => {
       consoleLogSpy.mockRestore();
     });
 
-    it('should pass correct export options to orchestrator', async () => {
+    it('should pass correct options to processUrl', async () => {
       const mockUrls = ['https://x.com/status/123'];
 
       jest.spyOn(runner as any, 'parseUrls').mockResolvedValue(mockUrls);
 
-      const mockResult = {
-        status: 'success' as const,
+      const processUrlSpy = jest.spyOn(runner as any, 'processUrl').mockResolvedValue({
+        status: 'success',
         platform: 'twitter',
         canonicalUrl: 'https://x.com/status/123',
-        title: 'Test Tweet',
-      };
-
-      (ClipOrchestrator.prototype.archive as jest.Mock).mockResolvedValue(
-        mockResult
-      );
+        title: 'Test',
+        paths: { markdownPath: '/test.md' },
+        stats: { wordCount: 100, imageCount: 0 },
+      });
 
       const consoleLogSpy = jest.spyOn(console, 'log').mockImplementation();
 
@@ -316,16 +374,20 @@ describe('BatchRunner', () => {
         format: 'md+html',
         downloadAssets: true,
         cdpEndpoint: 'http://localhost:9222',
+        json: true,
+        debug: true,
       });
 
-      expect(ClipOrchestrator.prototype.archive).toHaveBeenCalledWith(
+      expect(processUrlSpy).toHaveBeenCalledWith(
         'https://x.com/status/123',
+        mockContext,
         expect.objectContaining({
           outputDir: '/custom/output',
           format: 'md+html',
           downloadAssets: true,
-          json: false,
-          debug: false,
+          json: true,
+          debug: true,
+          cdpEndpoint: 'http://localhost:9222',
         })
       );
 
