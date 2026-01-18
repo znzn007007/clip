@@ -14,9 +14,36 @@ export class TwitterDomExtractor {
       const tweets: any[] = [];
 
       document.querySelectorAll('article[data-testid="tweet"]').forEach(article => {
-        // Extract text
+        // Extract text - try multiple selectors
+        let text = '';
+
+        // Method 1: Try standard tweetText selector
         const textEl = article.querySelector('[data-testid="tweetText"]');
-        const text = textEl?.textContent?.replace(/\s+/g, ' ').trim() || '';
+        if (textEl) {
+          text = textEl.textContent?.replace(/\s+/g, ' ').trim() || '';
+        }
+
+        // Method 2: Try longform text component
+        if (!text) {
+          const longformEl = article.querySelector('[data-testid="longformRichTextComponent"]');
+          if (longformEl) {
+            // Extract all text from span[data-text="true"] elements
+            const textSpans = longformEl.querySelectorAll('span[data-text="true"]');
+            text = Array.from(textSpans)
+              .map(s => s.textContent || '')
+              .join('')
+              .replace(/\s+/g, ' ')
+              .trim();
+          }
+        }
+
+        // Method 3: Fallback - get all text content excluding interactive elements
+        if (!text) {
+          const clonedArticle = article.cloneNode(true) as HTMLElement;
+          // Remove common non-content elements
+          clonedArticle.querySelectorAll('[data-testid="User-Name"], [data-testid="UserActions"], [role="group"], time, svg').forEach(el => el.remove());
+          text = clonedArticle.textContent?.replace(/\s+/g, ' ').trim() || '';
+        }
 
         // Extract author
         const authorEl = article.querySelector('[data-testid="User-Name"]');
