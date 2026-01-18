@@ -65,13 +65,40 @@
 **优先级:** ✅ 已完成 (2026-01-18)
 
 **实现内容:**
-- 实际图片下载（两层 fallback: page.goto → page.evaluate fetch）
-- 重试机制（指数退避: 1s → 2s → 4s）
-- 失败追踪（ExportResult.assetFailures + Markdown 尾注）
-- 返回类型更新为 Map<url, DownloadResult>
+- **类型定义:** `DownloadResult` (含 status, path, attempts, error) 和 `DownloadError`
+- **两层 fallback:** 尝试 `page.goto()` → 失败则用 `context.request.get()` (带 headers)
+- **重试机制:** 指数退避 (1s → 2s → 4s)，最多 3 次尝试
+- **失败追踪:** `ExportResult.assetFailures` + Markdown 尾注显示
+- **CLI 选项:** `--no-assets` 可跳过下载（默认启用）
+- **类型安全:** 返回 `Map<url, DownloadResult>` 包含实际尝试次数
+- **测试覆盖:** 97/97 测试通过，新增失败追踪测试
+
+**关键 Commits:**
+- `e7bf3ab` - 类型定义 + JSDoc
+- `e95ce10` - 下载方法实现
+- `c9e40fb` - downloadImages 主方法
+- `f2937cc` - 追踪实际重试次数
+- `530d3fe` - ExportResult 类型更新
+- `f955f35` - buildExportResult 函数
+- `01bca4f` - ClipOrchestrator 集成
+- `9f31332` - MarkdownGenerator 失败提示
+- `efd6b95` - 测试更新
+- `61cfdd9` - 修复测试失败
+- `5ab2134` - **最终修复:** context.request.get + CLI 选项修复
+
+**实际测试结果:**
+- ✅ Twitter: 成功下载 9 张图片 (1.9 MB)
+- ✅ 文件名: 001.jpg, 002.jpg, ... 009.jpg
+- ✅ 失败时使用原始 URL 作为回退
 
 **文件:**
-- `src/core/export/assets.ts`
+- `src/core/export/assets.ts` - 核心实现
+- `src/core/export/types.ts` - 类型定义
+- `src/core/export/json.ts` - ExportResult
+- `src/core/export/markdown.ts` - 失败提示
+- `src/core/orchestrator.ts` - 集成
+- `src/cli/commands/once.ts` - CLI 选项
+- `src/core/export/__tests__/assets.test.ts` - 测试
 
 ---
 
