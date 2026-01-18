@@ -21,15 +21,18 @@ export class PageRenderer {
 
     const page = await this.context.newPage();
 
-    // Navigate to URL
+    // Navigate to URL - wait for load since Twitter is a SPA
     await page.goto(url, {
-      waitUntil: 'commit',
+      waitUntil: 'load',
       timeout,
     });
 
-    // Wait for main content
+    // Additional wait for dynamic content (Twitter is heavily JS-driven)
+    await page.waitForTimeout(3000);
+
+    // Wait for main content with longer timeout
     const contentSelector = options.waitForSelector || 'article, main, [role="main"]';
-    await page.waitForSelector(contentSelector, { timeout: 5000 }).catch(() => {
+    await page.waitForSelector(contentSelector, { timeout: 10000 }).catch(() => {
       // Continue even if selector not found
     });
 
@@ -64,8 +67,9 @@ export class PageRenderer {
       // Ensure debug directory exists
       await fs.mkdir(debugDir, { recursive: true });
 
-      // Save HTML snapshot
-      debugHtmlPath = join(debugDir, `debug-twitter-${timestamp}.html`);
+      // Save HTML snapshot with platform prefix
+      const platformPrefix = platform === 'unknown' ? 'unknown' : platform;
+      debugHtmlPath = join(debugDir, `debug-${platformPrefix}-${timestamp}.html`);
       await fs.writeFile(debugHtmlPath, html);
 
       // Save raw data if available
