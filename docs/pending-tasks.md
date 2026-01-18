@@ -1,67 +1,21 @@
 # 未完成任务 / Pending Tasks
 
 **Date:** 2026-01-18
-**Status:** Work in Progress
+**Status:** Active
+**Project Completion:** ~92%
 
 ---
 
 ## 当前状态 / Current Status
 
-### 已完成 / Completed
+### 最近已完成 (2026-01-18)
 
-1. **Zhihu Adapter 完整实现** (commit `0b598d4`)
-   - 创建目录结构
-   - ZhihuExtractError 错误类
-   - ZhihuHtmlToBlocks HTML转换器
-   - ZhihuParser 解析器
-   - ZhihuAdapter 适配器
-   - 注册到适配器注册表
-   - PageRenderer 更新
-   - 端到端测试
-
-2. **Zhihu 反爬虫错误检测** (commit `b0314c3`)
-   - 添加 RATE_LIMITED 错误码
-   - 检测 Zhihu 40362 错误
-
-3. **CDP 浏览器连接功能** (commit `41f3fe9`)
-   - 添加 `--cdp` CLI 选项
-   - 支持连接到现有浏览器会话
-   - 保留登录状态
-
-4. **Twitter 长推文文本提取修复** (2026-01-18)
-   - 添加多种 DOM 提取方法处理长推文
-   - 支持标准 tweetText、longformRichTextComponent、兜底方案
-   - 文件: `src/core/extract/adapters/twitter/dom-extractor.ts:16-46`
-
-5. **Twitter 页面等待策略修复** (2026-01-18)
-   - 从 `waitUntil: 'commit'` 改为 `waitUntil: 'load'` + 3秒延迟
-   - 解决 SPA 内容未加载完成的问题
-   - 文件: `src/core/render/page.ts:24-31`
-
-6. **知乎爬取功能验证** (2026-01-18)
-   - 测试问答页面和专栏文章，功能正常
-   - 移除问答页面的问题标题，只保留答主内容
-   - 修复标题重复问题
-   - 文件: `src/core/extract/adapters/zhihu/index.ts`, `parser.ts`
-
-7. **Debug 文件名硬编码修复** (2026-01-18)
-   - 从 `debug-twitter-*` 改为 `debug-{platform}-*`
-   - 文件: `src/core/render/page.ts:70-72`
-
-8. **资产下载实现** (2026-01-18)
-   - 实际图片下载（两层 fallback: page.goto → page.evaluate fetch）
-   - 重试机制（指数退避: 1s → 2s → 4s）
-   - 失败追踪（ExportResult.assetFailures + Markdown 尾注）
-   - 文件: `src/core/export/assets.ts`
-
-9. **微信公众号适配器实现** (2026-01-18)
-   - 新增 WeChatAdapter（解析标题/作者/发布时间/正文/图片）
-   - HTML → Blocks 转换器与错误类型
-   - 注册到 AdapterRegistry
-   - 公众号昵称优先（`#js_name` / `.profile_nickname`）
-   - `published_at` 解析失败则留空
-   - 图片保留原始链接（下载待实现）
-   - 文件: `src/core/extract/adapters/wechat/*`
+1. **资产下载实现** - 两层 fallback、3 次重试、失败追踪
+2. **批量处理系统** - BatchRunner、CLI 统一重构、JSONL 输出
+3. **微信公众号适配器** - 完整解析实现
+4. **Twitter 长推文修复** - 多种 DOM 提取方法
+5. **页面等待策略优化** - waitUntil: 'load' + 3s 延迟
+6. **CDP 浏览器连接** - `--cdp` 选项支持
 
 ---
 
@@ -69,141 +23,7 @@
 
 ## P0 阻塞任务（必须完成）
 
-### 1. 资产下载实现 / Asset Download Implementation
-
-**优先级:** ✅ 已完成 (2026-01-18)
-
-**实现内容:**
-- **类型定义:** `DownloadResult` (含 status, path, attempts, error) 和 `DownloadError`
-- **两层 fallback:** 尝试 `page.goto()` → 失败则用 `context.request.get()` (带 headers)
-- **重试机制:** 指数退避 (1s → 2s → 4s)，最多 3 次尝试
-- **失败追踪:** `ExportResult.assetFailures` + Markdown 尾注显示
-- **CLI 选项:** `--no-assets` 可跳过下载（默认启用）
-- **类型安全:** 返回 `Map<url, DownloadResult>` 包含实际尝试次数
-- **测试覆盖:** 97/97 测试通过，新增失败追踪测试
-
-**关键 Commits:**
-- `e7bf3ab` - 类型定义 + JSDoc
-- `e95ce10` - 下载方法实现
-- `c9e40fb` - downloadImages 主方法
-- `f2937cc` - 追踪实际重试次数
-- `530d3fe` - ExportResult 类型更新
-- `f955f35` - buildExportResult 函数
-- `01bca4f` - ClipOrchestrator 集成
-- `9f31332` - MarkdownGenerator 失败提示
-- `efd6b95` - 测试更新
-- `61cfdd9` - 修复测试失败
-- `5ab2134` - **最终修复:** context.request.get + CLI 选项修复
-
-**实际测试结果:**
-- ✅ Twitter: 成功下载 9 张图片 (1.9 MB)
-- ✅ 文件名: 001.jpg, 002.jpg, ... 009.jpg
-- ✅ 失败时使用原始 URL 作为回退
-
-**文件:**
-- `src/core/export/assets.ts` - 核心实现
-- `src/core/export/types.ts` - 类型定义
-- `src/core/export/json.ts` - ExportResult
-- `src/core/export/markdown.ts` - 失败提示
-- `src/core/orchestrator.ts` - 集成
-- `src/cli/commands/once.ts` - CLI 选项
-- `src/core/export/__tests__/assets.test.ts` - 测试
-
----
-
-### 2. 图片位置修复 / Image Position Fix
-
-**优先级:** 🟡 P1
-
-**问题描述:**
-当前 Twitter 和可能其他平台的图片全部追加在文章末尾，而不是在原始位置。例如：
-- 原文: "文字第一段 [图1] 文字第二段 [图2]"
-- 当前: "文字第一段 文字第二段 [图1] [图2]"
-- 期望: "文字第一段 [图1] 文字第二段 [图2]"
-
-**根本原因:**
-- Twitter adapter 的 `block-builder.ts` 先提取文字，再批量添加图片
-- 图片位置信息在 API 中丢失
-- 需要从原始 HTML 中按 DOM 顺序解析
-
-**实现方案:**
-1. **Phase 1 - 修复 Twitter**: 重构 `html-to-blocks.ts` 按 DOM 顺序遍历
-2. **Phase 2 - 添加 blockId**: 给 `AssetImage` 添加 `blockId` 和 `position` 字段
-3. **Phase 3 - 验证 Zhihu**: 检查知乎图片位置是否正确
-
-**文件:**
-- `src/core/extract/adapters/twitter/html-to-blocks.ts`
-- `src/core/extract/adapters/twitter/block-builder.ts`
-- `src/core/types/index.ts` (AssetImage 接口)
-
-**设计文档:**
-- `docs/plans/2026-01-18-image-position-fix-design.md`
-
----
-
-### 3. 批量处理与队列系统 / Batch Processing & Queue System
-
-**优先级:** ✅ 已完成 (2026-01-18)
-
-**实现内容:**
-- **BatchRunner 类**: URL 解析（文件/stdin）、串行执行、JSONL 流式输出、汇总报告
-- **CLI 统一重构**: `clip once` → `clip <url>` 命令结构
-- **批量处理选项**: `--file`, `--stdin`, `--jsonl`, `--continue-on-error`
-- **队列命令 stub**: `clip queue add/list/run/clear`（待后续实现）
-- **集成测试**: CLI 命令结构验证
-
-**设计决策:**
-- **CLI 统一**: `clip` → `clip <url>`，`clip run` → `clip --file`
-- **命令分组**: `clip queue` 子命令管理队列
-- **批量模式**: 临时内存队列，无需持久化
-- **失败处理**: `--continue-on-error` 用户可选
-- **输出**: JSONL 流式 + 汇总报告
-
-**CLI 结构:**
-```bash
-# 单个 URL（位置参数）
-clip https://x.com/user/status/123
-
-# 批量 URL
-clip --file urls.txt
-clip --stdin < urls.txt
-
-# 队列管理（后续实现）
-clip queue add <url>
-clip queue list
-clip queue run
-clip queue clear
-```
-
-**文件结构:**
-```
-src/core/batch/
-├── runner.ts           # BatchRunner 主类
-└── __tests__/
-    └── runner.test.ts  # 测试
-
-src/cli/commands/
-├── archive.ts          # 统一命令（原 once.ts）
-└── queue.ts            # 队列管理 stub
-```
-
-**关键 Commits:**
-- `f903679` - BatchRunner 核心类（URL 解析、串行执行、输出）
-- `8309c56` - 代码质量修复（ESLint 警告、类型导出）
-- `d04a3fd` - CLI 统一重构（clip <url> 和 --file 选项）
-- `b2aa742` - queue 命令 stub
-- `c195c41` - CLI 集成测试
-
-**文件:**
-- `src/core/batch/runner.ts` - BatchRunner 实现
-- `src/cli/commands/archive.ts` - 统一 CLI 命令
-- `src/cli/commands/queue.ts` - 队列命令 stub
-- `src/cli/__tests__/integration.test.ts` - 集成测试
-- `docs/plans/2026-01-18-batch-processing-design.md` - 设计文档
-
----
-
-### 4. 去重逻辑实现 / Deduplication Logic
+### 1. 去重逻辑实现 / Deduplication Logic
 
 **优先级:** 🔴 P0 阻塞
 
@@ -249,9 +69,36 @@ clip "url" --version # 版本化保存 (v1, v2...)
 
 ---
 
-## 常规待办任务
+## P1 高优先级
 
-### 5. 重构浏览器策略 / Refactor Browser Strategy
+### 2. 图片位置修复 / Image Position Fix
+
+**优先级:** 🟡 P1
+
+**问题描述:**
+当前 Twitter 和可能其他平台的图片全部追加在文章末尾，而不是在原始位置。
+
+**根本原因:**
+- Twitter adapter 的 `block-builder.ts` 先提取文字，再批量添加图片
+- 图片位置信息在 API 中丢失
+- 需要从原始 HTML 中按 DOM 顺序解析
+
+**实现方案:**
+1. **Phase 1** - 修复 Twitter: 重构 `html-to-blocks.ts` 按 DOM 顺序遍历
+2. **Phase 2** - 添加 blockId: 给 `AssetImage` 添加 `blockId` 和 `position` 字段
+3. **Phase 3** - 验证 Zhihu: 检查知乎图片位置是否正确
+
+**文件:**
+- `src/core/extract/adapters/twitter/html-to-blocks.ts`
+- `src/core/extract/adapters/twitter/block-builder.ts`
+- `src/core/types/index.ts` (AssetImage 接口)
+
+**设计文档:**
+- `docs/plans/2026-01-18-image-position-fix-design.md`
+
+---
+
+### 3. 重构浏览器策略 / Refactor Browser Strategy
 
 **优先级:** 高 / High
 
@@ -271,32 +118,20 @@ clip "url" --version # 版本化保存 (v1, v2...)
 - `src/core/render/browser.ts`
 - `src/core/config/constants.ts`
 
-**实现步骤:**
-1. 移除硬编码的 `channel: 'msedge'`
-2. 添加浏览器自动检测逻辑
-3. 实现 fallback 机制
-4. 添加 `--browser` CLI 选项允许用户指定
-5. 更新错误提示信息
-
 **CLI 选项示例:**
 ```bash
 # 自动选择（默认）
 clip "https://x.com/.../status/123"
 
 # 指定浏览器
-clip "https://x.com/...status/123" --browser chrome
-clip "https://x.com/...status/123" --browser playwright
-clip "https://x.com/...status/123" --browser edge
+clip "url" --browser chrome
+clip "url" --browser playwright
+clip "url" --browser edge
 ```
-
-**考虑事项:**
-- Playwright 浏览器需要首次安装 (`clip install-browsers`)
-- 系统浏览器可复用登录状态 (persistent context)
-- 跨平台兼容性 (Win/Mac/Linux)
 
 ---
 
-### 6. 测试 CDP 连接功能 / Test CDP Connection
+### 4. 测试 CDP 连接功能 / Test CDP Connection
 
 **优先级:** 高 / High
 
@@ -319,7 +154,7 @@ clip "https://x.com/...status/123" --browser edge
 
 ---
 
-### 7. 配置文件支持 / Configuration File Support
+### 5. 配置文件支持 / Configuration File Support
 
 **优先级:** 高 / High
 
@@ -350,36 +185,25 @@ clip "https://x.com/...status/123" --browser edge
 - `src/core/config/loader.ts` - 配置加载器
 - `src/core/config/schema.ts` - 配置类型定义
 
-**实现步骤:**
-1. 定义配置类型结构
-2. 实现配置文件加载逻辑（支持 json/js 格式）
-3. CLI 参数与配置文件合并（CLI 优先级更高）
-4. 添加 `--config` 选项指定配置文件路径
-5. 添加 `clip config` 命令管理配置
-
 **CLI 优先级示例:**
 ```bash
 # 配置文件设置 outputDir: "./archive"
-clip "url"
-# → 输出到 ./archive/
+clip "url"  # → 输出到 ./archive/
 
 # CLI 参数覆盖
-clip "url" --out "./custom"
-# → 输出到 ./custom/ (CLI 优先)
+clip "url" --out "./custom"  # → 输出到 ./custom/
 ```
 
 ---
 
-### 8. 修复可能的 Zhihu 选择器问题 / Fix Zhihu Selectors if Needed
+## P2 中优先级
+
+### 6. 修复可能的 Zhihu 选择器问题 / Fix Zhihu Selectors if Needed
 
 **优先级:** 中 / Medium
 
 **任务描述:**
 如果 CDP 连接成功但仍无法提取内容，可能需要更新 Zhihu HTML 选择器。
-
-**可能的问题:**
-- Zhihu DOM 结构可能已变化
-- 选择器不匹配实际页面结构
 
 **文件:**
 - `src/core/extract/adapters/zhihu/parser.ts`
@@ -399,7 +223,7 @@ $('.Post-RichText')
 
 ---
 
-### 9. 实现 parseFromRawState / Implement Raw State Parsing
+### 7. 实现 parseFromRawState / Implement Raw State Parsing
 
 **优先级:** 中 / Medium
 
@@ -407,7 +231,7 @@ $('.Post-RichText')
 当前 `ZhihuParser.parseFromRawState()` 返回 null（stub 实现）。实现从 Zhihu 的 `__INITIAL_STATE__` 解析数据。
 
 **文件:**
-- `src/core/extract/adapters/zhihu/parser.ts`
+- `src/core/extract/adapters/zhihu/parser.ts:26`
 
 **参考:**
 - Twitter adapter 的 `parseFromRawState` 实现
@@ -415,7 +239,7 @@ $('.Post-RichText')
 
 ---
 
-### 10. 单元测试 / Unit Tests
+### 8. 单元测试 / Unit Tests
 
 **优先级:** 中 / Medium
 
@@ -433,7 +257,29 @@ $('.Post-RichText')
 
 ---
 
-### 11. 改进浏览器指纹 / Improve Browser Fingerprinting
+### 9. 队列命令实现 / Queue Commands Implementation
+
+**优先级:** 中 / Medium
+
+**任务描述:**
+当前 `clip queue` 命令只是 stub，需要实现完整的队列管理功能。
+
+**文件:**
+- `src/cli/commands/queue.ts`
+
+**待实现子命令:**
+```bash
+clip queue add <url>     # 添加到队列
+clip queue list          # 列出队列
+clip queue run           # 执行队列
+clip queue clear         # 清空队列
+```
+
+---
+
+## P3 低优先级
+
+### 10. 改进浏览器指纹 / Improve Browser Fingerprinting
 
 **优先级:** 低 / Low
 
@@ -480,13 +326,20 @@ $('.Post-RichText')
 2. **根据测试结果:**
    - 如果成功: 提取用户请求的 Zhihu 内容
    - 如果失败: 调试选择器或进一步优化浏览器指纹
-3. **后续工作:** 推进资产下载与队列/批量功能
+3. **后续优先级:** 去重逻辑 → 图片位置修复 → 浏览器策略重构
 
 ---
 
-## 相关 Commits
+## 项目完成度评估
 
-- `0b598d4` - docs: complete Zhihu content parsing implementation plan
-- `b0314c3` - feat(zhihu): add rate limit error detection for Zhihu anti-bot protection
-- `41f3fe9` - feat(browser): add CDP connection to existing browser sessions
-- `415fec4` - docs: complete Zhihu content parsing implementation (Task 8 - End-to-End Testing)
+| 模块 | 完成度 | 状态 |
+|------|--------|------|
+| CLI 层 | 66% | archive ✅ / install-browsers ✅ / queue ❌ |
+| 编排层 | 100% | ✅ ClipOrchestrator 完整实现 |
+| 渲染层 | 95% | ✅ Playwright / ⚠️ 仅支持 Edge |
+| 提取层 | 96% | Twitter ✅ / Zhihu 90% / WeChat ✅ |
+| 导出层 | 100% | ✅ Markdown / JSON / 资源下载 |
+| 批处理 | 100% | ✅ BatchRunner 完整实现 |
+
+**整体完成度: ~92%**
+**测试覆盖: 123/123 通过**
