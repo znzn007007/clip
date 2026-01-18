@@ -20,6 +20,8 @@ export interface DownloadResult {
   status: 'success' | 'failed';
   /** Local path on success, original URL on failure */
   path: string;
+  /** Number of attempts made (1-3) */
+  attempts: number;
   /** Error details (present only when status is 'failed') */
   error?: {
     /** Localized error message for UI display */
@@ -86,7 +88,7 @@ export class AssetDownloader {
           url: image.url,
           filename,
           reason: result.error?.reason || '未知错误',
-          attempts: 3
+          attempts: result.attempts
         });
       }
     }
@@ -145,14 +147,14 @@ export class AssetDownloader {
       try {
         // Try Method 1: Context download
         await this.tryContextDownload(url, filepath);
-        return { status: 'success', path: `./assets/${filename}` };
+        return { status: 'success', path: `./assets/${filename}`, attempts: attempt + 1 };
       } catch (e1) {
         errors.push(`Method1: ${(e1 as Error).message}`);
 
         // Try Method 2: Fetch fallback
         try {
           await this.tryFetchDownload(url, filepath);
-          return { status: 'success', path: `./assets/${filename}` };
+          return { status: 'success', path: `./assets/${filename}`, attempts: attempt + 1 };
         } catch (e2) {
           errors.push(`Method2: ${(e2 as Error).message}`);
         }
@@ -170,6 +172,7 @@ export class AssetDownloader {
     return {
       status: 'failed',
       path: url,  // Use original URL as fallback
+      attempts: 3,  // All 3 attempts were made
       error: { reason }
     };
   }
