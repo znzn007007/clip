@@ -1,5 +1,6 @@
 // src/core/export/types.ts
 import type { ClipDoc } from '../types/index.js';
+import type { DownloadError } from './assets.js';
 
 export type ExportFormat = 'md' | 'md+html';
 
@@ -38,6 +39,7 @@ export interface ExportResult {
   diagnostics?: {
     warnings: string[];
     error?: ExportError;
+    assetFailures?: DownloadError[];
   };
 }
 
