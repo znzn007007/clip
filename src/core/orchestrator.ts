@@ -27,7 +27,7 @@ export class ClipOrchestrator {
     const normalizedUrl = normalizeUrl(url);
 
     // Launch browser
-    const context = await this.browserManager.launch();
+    const context = await this.browserManager.launch(normalizedUrl);
 
     try {
       // Render

@@ -6,6 +6,7 @@ import * as os from 'os';
 import { DEFAULT_USER_AGENT } from '../config/constants.js';
 import { ClipError } from '../errors.js';
 import { ErrorCode } from '../export/types.js';
+import { detectPlatform } from './utils.js';
 
 export interface BrowserOptions {
   cdpEndpoint?: string;  // Chrome DevTools Protocol endpoint (e.g., 'http://localhost:9222')
@@ -21,7 +22,7 @@ export class BrowserManager {
     this.options = options;
   }
 
-  async launch(): Promise<BrowserContext> {
+  async launch(targetUrl?: string): Promise<BrowserContext> {
     if (this.context) {
       return this.context;
     }
@@ -68,40 +69,43 @@ export class BrowserManager {
         ],
       });
 
-      // Check if we have Twitter/X cookies
-      const cookies = await this.context.cookies();
-      const hasTwitterCookie = cookies.some(c =>
-        c.domain.includes('x.com') || c.domain.includes('twitter.com')
-      );
+      const shouldCheckTwitterLogin = this.shouldCheckTwitterLogin(targetUrl);
+      if (shouldCheckTwitterLogin) {
+        // Check if we have Twitter/X cookies
+        const cookies = await this.context.cookies();
+        const hasTwitterCookie = cookies.some(c =>
+          c.domain.includes('x.com') || c.domain.includes('twitter.com')
+        );
 
-      if (!hasTwitterCookie) {
-        console.error('[WARN] No Twitter/X cookies found in session.');
-        console.error('[INFO] Please log in to Twitter/X in the browser window that will open.');
-        console.error('[INFO] The browser will wait for you to navigate to Twitter/X and log in.');
-        console.error('[INFO] After logging in, the extraction will proceed automatically.');
+        if (!hasTwitterCookie) {
+          console.error('[WARN] No Twitter/X cookies found in session.');
+          console.error('[INFO] Please log in to Twitter/X in the browser window that will open.');
+          console.error('[INFO] The browser will wait for you to navigate to Twitter/X and log in.');
+          console.error('[INFO] After logging in, the extraction will proceed automatically.');
 
-        // Navigate to Twitter to give user a chance to log in
-        const page = this.context.pages()[0] || await this.context.newPage();
-        await page.goto('https://x.com');
-        console.error('[INFO] Waiting for you to log in... (Press Ctrl+C to cancel)');
+          // Navigate to Twitter to give user a chance to log in
+          const page = this.context.pages()[0] || await this.context.newPage();
+          await page.goto('https://x.com');
+          console.error('[INFO] Waiting for you to log in... (Press Ctrl+C to cancel)');
 
-        // Wait for auth cookie (check every 2 seconds)
-        let loggedIn = false;
-        for (let i = 0; i < 60; i++) { // Wait up to 2 minutes
-          await page.waitForTimeout(2000);
-          const currentCookies = await this.context.cookies();
-          if (currentCookies.some(c => c.name === 'auth_token' && (c.domain.includes('x.com') || c.domain.includes('twitter.com')))) {
-            loggedIn = true;
-            console.error('[INFO] Login detected! Proceeding with extraction...');
-            break;
+          // Wait for auth cookie (check every 2 seconds)
+          let loggedIn = false;
+          for (let i = 0; i < 60; i++) { // Wait up to 2 minutes
+            await page.waitForTimeout(2000);
+            const currentCookies = await this.context.cookies();
+            if (currentCookies.some(c => c.name === 'auth_token' && (c.domain.includes('x.com') || c.domain.includes('twitter.com')))) {
+              loggedIn = true;
+              console.error('[INFO] Login detected! Proceeding with extraction...');
+              break;
+            }
           }
-        }
 
-        if (!loggedIn) {
-          console.error('[WARN] Login not detected within timeout. Proceeding anyway...');
+          if (!loggedIn) {
+            console.error('[WARN] Login not detected within timeout. Proceeding anyway...');
+          }
+        } else {
+          console.error('[INFO] Twitter/X cookies found in session, proceeding...');
         }
-      } else {
-        console.error('[INFO] Twitter/X cookies found in session, proceeding...');
       }
 
     } catch (error) {
@@ -114,6 +118,18 @@ export class BrowserManager {
     }
 
     return this.context;
+  }
+
+  private shouldCheckTwitterLogin(targetUrl?: string): boolean {
+    if (!targetUrl) {
+      return true;
+    }
+    try {
+      const url = new URL(targetUrl);
+      return detectPlatform(url) === 'twitter';
+    } catch {
+      return true;
+    }
   }
 
   /**

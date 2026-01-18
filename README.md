@@ -38,6 +38,9 @@ clip install-browsers
 # Archive a single URL
 clip once "https://x.com/user/status/123"
 
+# Archive a WeChat Official Account article
+clip once "https://mp.weixin.qq.com/s/xxxx"
+
 # Specify output directory
 clip once "https://x.com/user/status/123" --out ~/my-clips
 
@@ -104,19 +107,18 @@ Create one file per day in `docs/dailyReport/` named `YYYY-MM-DD-summary.md`. Do
 
 ## Current Status
 
-**M1 - Twitter Basic (Complete)**
+**M1 - Core Adapters (Complete)**
 - Project structure
 - Core type definitions
 - Render layer with Playwright
-- Extract layer (stub)
 - Export layer (Markdown generation)
-- Twitter adapter (needs full implementation)
+- Twitter adapter (raw + DOM + HTML fallback)
+- Zhihu adapter (HTML parsing)
+- WeChat adapter (HTML parsing)
 - Asset downloading (needs implementation)
 
 ## TODO
 
-- [ ] Complete Twitter adapter HTML parsing
 - [ ] Implement actual image downloading
-- [ ] Add thread expansion logic
-- [ ] Add quote tweet handling
-- [ ] Add error handling and retry logic
+- [ ] Queue/batch processing
+- [ ] Config file support

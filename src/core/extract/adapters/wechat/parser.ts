@@ -68,9 +68,9 @@ export class WeChatParser {
     const candidates = [
       $('#js_name').text(),
       $('.profile_nickname').text(),
+      this.extractScriptValue(html, 'nickname') || '',
       $('meta[name="author"]').attr('content') || '',
       $('meta[property="og:site_name"]').attr('content') || '',
-      this.extractScriptValue(html, 'nickname') || '',
     ];
 
     const name = this.pickText(candidates);

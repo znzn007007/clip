@@ -41,10 +41,11 @@ function generateSlug(title: string): string {
 }
 
 export function buildFrontMatter(doc: ClipDoc): string {
+  const canonicalUrl = doc.canonicalUrl || doc.sourceUrl;
   const frontMatter: Record<string, unknown> = {
     title: doc.title,
     source_url: doc.sourceUrl,
-    canonical_url: doc.canonicalUrl,
+    canonical_url: canonicalUrl,
     platform: doc.platform,
     fetched_at: doc.fetchedAt,
     tags: [],
