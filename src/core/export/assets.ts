@@ -1,6 +1,23 @@
 // src/core/export/assets.ts
 import type { BrowserContext } from 'playwright';
 import type { AssetImage } from '../types/index.js';
+import * as fs from 'fs/promises';
+import { join } from 'path';
+
+export interface DownloadResult {
+  status: 'success' | 'failed';
+  path: string;  // success: "./assets/001.jpg", failed: original URL
+  error?: {
+    reason: string;  // Chinese error message: 网络超时, 404, 连接失败, etc.
+  };
+}
+
+export interface DownloadError {
+  url: string;
+  filename: string;  // e.g., "001.jpg" (for display, not URL)
+  reason: string;    // Chinese error message
+  attempts: number;  // 0-3
+}
 
 export class AssetDownloader {
   constructor(private context: BrowserContext) {}
