@@ -1,29 +1,41 @@
 // src/core/export/markdown.ts
 import * as fs from 'fs/promises';
 import type { ClipDoc, Block, TweetMetaBlock } from '../types/index.js';
+import type { DownloadResult, DownloadError } from './assets.js';
 import { buildFrontMatter, generateOutputPaths } from './path.js';
 
 export class MarkdownGenerator {
   async generate(
     doc: ClipDoc,
     outputDir: string,
-    assetMapping: Map<string, string> = new Map()
+    assetMapping: Map<string, DownloadResult> = new Map(),
+    assetFailures?: DownloadError[]
   ): Promise<string> {
     const { markdownPath } = await generateOutputPaths(doc, outputDir);
 
     let content = buildFrontMatter(doc);
     content += this.blocksToMarkdown(doc.blocks, assetMapping);
 
+    // Add failure notice
+    if (assetFailures && assetFailures.length > 0) {
+      content += '\n\n---\n\n';
+      content += '## 图片下载提示\n\n';
+      content += '部分图片使用在线链接：\n\n';
+      for (const fail of assetFailures) {
+        content += `• ${fail.filename} (${fail.reason})\n`;
+      }
+    }
+
     await fs.writeFile(markdownPath, content, 'utf-8');
 
     return markdownPath;
   }
 
-  private blocksToMarkdown(blocks: Block[], assetMapping: Map<string, string>): string {
+  private blocksToMarkdown(blocks: Block[], assetMapping: Map<string, DownloadResult>): string {
     return blocks.map(block => this.blockToMarkdown(block, assetMapping)).join('\n\n');
   }
 
-  private blockToMarkdown(block: Block, assetMapping: Map<string, string>): string {
+  private blockToMarkdown(block: Block, assetMapping: Map<string, DownloadResult>): string {
     switch (block.type) {
       case 'paragraph':
         return block.content;
@@ -45,7 +57,8 @@ export class MarkdownGenerator {
         return block.items.map(item => prefix + item).join('\n');
 
       case 'image':
-        const filename = assetMapping.get(block.url) || block.url;
+        const result = assetMapping.get(block.url);
+        const filename = result?.path || block.url;
         return `![${block.alt}](${filename})`;
 
       case 'link':
@@ -53,7 +66,8 @@ export class MarkdownGenerator {
 
       case 'video':
         if (block.thumbnail) {
-          const thumb = assetMapping.get(block.thumbnail) || block.thumbnail;
+          const thumbResult = assetMapping.get(block.thumbnail);
+          const thumb = thumbResult?.path || block.thumbnail;
           return `[视频: 已截图](${thumb})\n\n[视频链接](${block.url})`;
         }
         return `[视频链接](${block.url})`;
