@@ -8,6 +8,7 @@ import { buildExportResult } from './export/json.js';
 import { isValidUrl, normalizeUrl } from './render/utils.js';
 import { ClipError, ErrorCode, createExportResult } from './errors.js';
 import type { ExportOptions, ExportResult } from './export/types.js';
+import type { DownloadResult, DownloadError } from './export/assets.js';
 import { generateOutputPaths } from './export/path.js';
 
 export class ClipOrchestrator {
@@ -49,16 +50,18 @@ export class ClipOrchestrator {
       );
 
       // Download assets
-      let assetMapping = new Map<string, string>();
+      let assetMapping = new Map<string, DownloadResult>();
+      let assetFailures: DownloadError[] = [];
       if (options.downloadAssets) {
         assetMapping = await assetDownloader.downloadImages(
           doc.assets.images,
           assetsDir
         );
+        assetFailures = assetDownloader.getFailures();
       }
 
-      // Generate markdown
-      await markdownGen.generate(doc, options.outputDir, assetMapping);
+      // Generate markdown (pass failures)
+      await markdownGen.generate(doc, options.outputDir, assetMapping, assetFailures);
 
       // Build result
       const stats = {
@@ -66,7 +69,7 @@ export class ClipOrchestrator {
         imageCount: doc.assets.images.length,
       };
 
-      return buildExportResult(doc, { markdownPath, assetsDir }, stats);
+      return buildExportResult(doc, { markdownPath, assetsDir }, stats, assetFailures);
     } catch (error) {
       if (error instanceof ClipError) {
         return createExportResult(error);
