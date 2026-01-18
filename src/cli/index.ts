@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { Command } from 'commander';
-import { registerOnceCommand } from './commands/once.js';
+import { registerArchiveCommand } from './commands/archive.js';
 import { registerInstallBrowsersCommand } from './commands/install-browsers.js';
 
 const program = new Command();
@@ -12,6 +12,6 @@ program
   .version('0.1.0');
 
 registerInstallBrowsersCommand(program);
-registerOnceCommand(program);
+registerArchiveCommand(program);
 
 program.parse();
