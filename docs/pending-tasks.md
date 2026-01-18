@@ -48,6 +48,12 @@
    - 从 `debug-twitter-*` 改为 `debug-{platform}-*`
    - 文件: `src/core/render/page.ts:70-72`
 
+8. **资产下载实现** (2026-01-18)
+   - 实际图片下载（两层 fallback: page.goto → page.evaluate fetch）
+   - 重试机制（指数退避: 1s → 2s → 4s）
+   - 失败追踪（ExportResult.assetFailures + Markdown 尾注）
+   - 文件: `src/core/export/assets.ts`
+
 ---
 
 ## 未完成任务 / Pending Tasks
@@ -56,49 +62,16 @@
 
 ### 1. 资产下载实现 / Asset Download Implementation
 
-**优先级:** 🔴 P0 阻塞
+**优先级:** ✅ 已完成 (2026-01-18)
 
-**问题描述:**
-当前 `AssetDownloader.downloadImages()` 只返回 URL 映射，没有实际下载文件到本地。需要实现真实的图片下载。
+**实现内容:**
+- 实际图片下载（两层 fallback: page.goto → page.evaluate fetch）
+- 重试机制（指数退避: 1s → 2s → 4s）
+- 失败追踪（ExportResult.assetFailures + Markdown 尾注）
+- 返回类型更新为 Map<url, DownloadResult>
 
 **文件:**
 - `src/core/export/assets.ts`
-
-**实现步骤:**
-1. 使用 Playwright 的 `context.download()` 或 `page.goto()` + fetch
-2. 保留 cookie 和 referer 绕过防盗链
-3. 下载到 `assets/` 目录，使用递增编号命名
-4. 失败重试机制（3 次）
-5. 返回下载结果（成功/失败/路径）
-
-**示例代码:**
-```typescript
-async downloadImages(images: AssetImage[], assetsDir: string): Promise<Map<string, string>> {
-  const mapping = new Map();
-
-  for (let i = 0; i < images.length; i++) {
-    const image = images[i];
-    const filename = `${String(i + 1).padStart(3, '0')}.jpg`;
-    const filepath = join(assetsDir, filename);
-
-    try {
-      // 在浏览器上下文中下载（保留 cookie）
-      const page = await this.context.newPage();
-      await page.goto(image.url);
-      const buffer = await page.screenshot({ fullPage: false }); // 或使用 fetch
-      await fs.writeFile(filepath, buffer);
-      await page.close();
-
-      mapping.set(image.url, `./assets/${filename}`);
-    } catch (error) {
-      // 重试或记录失败
-      mapping.set(image.url, null); // 标记失败
-    }
-  }
-
-  return mapping;
-}
-```
 
 ---
 

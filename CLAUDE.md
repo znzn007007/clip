@@ -22,6 +22,38 @@ node dist/cli/index.js once "https://x.com/user/status/123"
 node dist/cli/index.js install-browsers
 ```
 
+## Development Guidelines
+
+### Test-Driven Development (TDD)
+
+**CRITICAL**: All feature development MUST follow TDD:
+
+1. **Write tests first** - Create test cases before implementing functionality
+2. **Run tests to verify failure** - Tests should fail initially (red)
+3. **Implement minimal code** - Write just enough code to pass tests
+4. **Run tests to verify success** - Tests should pass (green)
+5. **Refactor** - Clean up code while keeping tests green
+
+**Test file locations:**
+- Place tests next to source files: `src/path/to/file.ts` → `src/path/to/__tests__/file.test.ts`
+- Or co-located: `src/path/to/file.test.ts`
+
+**Example workflow:**
+```bash
+# 1. Create test file first
+touch src/core/extract/adapters/wechat/__tests__/index.test.ts
+
+# 2. Write test cases (describe expected behavior)
+# 3. Run tests (expect failures)
+npm test -- wechat
+
+# 4. Implement adapter code
+# 5. Run tests again (expect success)
+npm test
+
+# 6. Refactor if needed
+```
+
 ## Architecture Overview
 
 The codebase follows a **pipeline architecture** with four main layers:
@@ -123,7 +155,7 @@ Core types in `src/core/types/index.ts`:
 
 ## Known Issues
 
-1. **Asset downloading not implemented** - `AssetDownloader.downloadImages()` only returns mappings, doesn't download files
+1. ~~Asset downloading not implemented~~ - ✅ Completed (2026-01-18)
 2. **Zhihu parseFromRawState** is stub (returns null)
 3. **CDP connection** option exists but not implemented in `BrowserManager`
 4. **Browser hardcoding** - only works with Edge currently
