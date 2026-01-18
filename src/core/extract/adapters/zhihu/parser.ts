@@ -63,15 +63,32 @@ export class ZhihuParser {
   }
 
   private parseAnswer($: cheerio.CheerioAPI, _url: string): ZhihuData {
-    // Extract question title
+    // Extract question title (for reference, not displayed)
     const questionTitle = $('h1.QuestionHeader-title').text().trim();
 
     // Extract answer content
     const answerContent = $('.RichContent-inner').html() || '';
 
-    // Extract author
-    const authorName = $('.AuthorInfo-name').text().trim();
-    const authorUrl = $('.AuthorInfo-name a').attr('href') || '';
+    // Extract author - try multiple selectors to get complete name
+    let authorName = '';
+    const authorSelectors = [
+      '.AuthorInfo-name',           // Primary selector
+      '.UserLink-link',              // Alternative
+      '[itemprop="name"]',           // Schema.org
+    ];
+
+    for (const selector of authorSelectors) {
+      const el = $(selector).first();
+      if (el.length > 0) {
+        const name = el.text().trim();
+        if (name && name.length > 1) {
+          authorName = name;
+          break;
+        }
+      }
+    }
+
+    const authorUrl = $('.AuthorInfo-name a').first().attr('href') || '';
 
     // Extract upvotes
     const upvotesText = $('.VoteButton--up .VoteCount').text().trim();
@@ -90,7 +107,7 @@ export class ZhihuParser {
       type: 'answer',
       question: { title: questionTitle },
       content: answerContent,
-      author: { name: authorName, url: authorUrl || '' },
+      author: { name: authorName || '匿名用户', url: authorUrl || '' },
       publishedAt: new Date().toISOString(),
       images,
       upvotes,

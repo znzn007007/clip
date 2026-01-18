@@ -49,24 +49,16 @@ export class ZhihuAdapter extends BaseAdapter {
   private buildDoc(data: ZhihuData, page: RenderedPage): ClipDoc {
     const blocks: Block[] = [];
 
-    // Title
-    if (data.title) {
+    // Title (only for articles, answers use question title but without displaying it)
+    if (data.type === 'article' && data.title) {
       blocks.push({ type: 'heading', level: 1, content: data.title });
-    }
-
-    // Question title (for answers)
-    if (data.question) {
-      blocks.push({ type: 'heading', level: 2, content: data.question.title });
-      if (data.question.detail) {
-        blocks.push({ type: 'paragraph', content: data.question.detail });
-      }
     }
 
     // Content (HTML to Blocks)
     const contentBlocks = this.htmlConverter.convert(data.content);
     blocks.push(...contentBlocks);
 
-    // Metadata
+    // Metadata (upvotes for answers)
     if (data.upvotes !== undefined) {
       blocks.push({
         type: 'paragraph',
@@ -84,12 +76,32 @@ export class ZhihuAdapter extends BaseAdapter {
       platform: 'zhihu',
       sourceUrl: page.url,
       canonicalUrl: page.canonicalUrl,
-      title: data.title || data.question?.title || '知乎内容',
+      // Use article title, or generate from question (not showing question in content)
+      // Remove duplicate question titles if present
+      title: data.title || (data.type === 'answer'
+        ? this.deduplicateTitle(data.question?.title || '知乎内容') + ` - ${data.author.name}的回答`
+        : '知乎内容'),
       author: data.author.name,
       publishedAt: data.publishedAt,
       fetchedAt: new Date().toISOString(),
       blocks,
       assets: { images },
     };
+  }
+
+  private deduplicateTitle(title: string): string {
+    // Remove only full-string repetitions like "如何评价前端已死？如何评价前端已死？"
+    // Preserve legitimate character repetitions like "哈哈哈哈是什么"
+    const mid = Math.floor(title.length / 2);
+    for (let i = mid; i > 0; i--) {
+      if (title.length % i === 0) {
+        const candidate = title.slice(0, i);
+        const repeatCount = title.length / i;
+        if (candidate.repeat(repeatCount) === title) {
+          return candidate;
+        }
+      }
+    }
+    return title;
   }
 }
