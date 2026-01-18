@@ -143,14 +143,14 @@
 
 ### 3. 批量处理与队列系统 / Batch Processing & Queue System
 
-**优先级:** 🟡 P1 设计完成，待实现
+**优先级:** ✅ 已完成 (2026-01-18)
 
-**状态:**
-- ✅ 设计文档: `docs/plans/2026-01-18-batch-processing-design.md`
-- ⏳ BatchRunner 实现中
-- ⏳ CLI 统一重构: `clip <url>` 代替 `clip`
-- ⏳ 批量处理: `clip --file urls.txt` 和 `clip --stdin`
-- ⏳ 队列管理 (clip queue add/list/run/clear) - 后续实现
+**实现内容:**
+- **BatchRunner 类**: URL 解析（文件/stdin）、串行执行、JSONL 流式输出、汇总报告
+- **CLI 统一重构**: `clip once` → `clip <url>` 命令结构
+- **批量处理选项**: `--file`, `--stdin`, `--jsonl`, `--continue-on-error`
+- **队列命令 stub**: `clip queue add/list/run/clear`（待后续实现）
+- **集成测试**: CLI 命令结构验证
 
 **设计决策:**
 - **CLI 统一**: `clip` → `clip <url>`，`clip run` → `clip --file`
@@ -187,11 +187,19 @@ src/cli/commands/
 └── queue.ts            # 队列管理 stub
 ```
 
-**实现步骤:**
-1. 创建 BatchRunner 类（URL 解析、串行执行、输出）
-2. 重构 once.ts → archive.ts（支持位置参数和 --file）
-3. 添加 queue.ts 命令 stub
-4. 集成测试和文档更新
+**关键 Commits:**
+- `f903679` - BatchRunner 核心类（URL 解析、串行执行、输出）
+- `8309c56` - 代码质量修复（ESLint 警告、类型导出）
+- `d04a3fd` - CLI 统一重构（clip <url> 和 --file 选项）
+- `b2aa742` - queue 命令 stub
+- `c195c41` - CLI 集成测试
+
+**文件:**
+- `src/core/batch/runner.ts` - BatchRunner 实现
+- `src/cli/commands/archive.ts` - 统一 CLI 命令
+- `src/cli/commands/queue.ts` - 队列命令 stub
+- `src/cli/__tests__/integration.test.ts` - 集成测试
+- `docs/plans/2026-01-18-batch-processing-design.md` - 设计文档
 
 ---
 
