@@ -8,3 +8,4 @@ tmpclaude-*
 .worktrees/
 debug/
 .clip/
+.idea/

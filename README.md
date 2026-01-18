@@ -65,6 +65,43 @@ clips/
                     └── 002.png
 ```
 
+## Contributing
+
+### Project Structure
+
+- Source: `src/` (CLI in `src/cli/`, core pipeline in `src/core/`)
+- Tests: `src/**/__tests__/**/*.test.ts`
+- Build output: `dist/`
+- Runtime output: `clips/` (debug artifacts in `debug/`)
+- Docs: `docs/` (daily reports in `docs/dailyReport/`)
+
+### Commands
+
+- `npm run build` compiles TypeScript to `dist/`.
+- `npm run dev` runs TypeScript in watch mode.
+- `npm test` runs Jest (`ts-jest`).
+
+### Style & Naming
+
+- TypeScript ESM with `.js` import specifiers (even in `.ts`).
+- 2-space indentation, semicolons, strict type checking.
+- `PascalCase` for classes, `camelCase` for functions/variables.
+
+### Tests
+
+- Place tests under `__tests__/` with `*.test.ts` names.
+- Use realistic HTML fixtures when parsing DOM-heavy sources.
+
+### Commits & PRs
+
+- Use Conventional Commits: `feat(scope): ...`, `fix: ...`, `docs: ...`, `chore: ...`, `test: ...`.
+- PRs should include a short summary and the validation commands run.
+- If output changes, include a small example of the `clips/` layout or snippet.
+
+### Daily Reports
+
+Create one file per day in `docs/dailyReport/` named `YYYY-MM-DD-summary.md`. Do not edit or rename past entries.
+
 ## Current Status
 
 **M1 - Twitter Basic (Complete)**
