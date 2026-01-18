@@ -50,6 +50,8 @@ export interface DownloadError {
 }
 
 export class AssetDownloader {
+  private failures: DownloadError[] = [];
+
   constructor(private context: BrowserContext) {}
 
   private sleep(ms: number): Promise<void> {
@@ -59,16 +61,34 @@ export class AssetDownloader {
   async downloadImages(
     images: AssetImage[],
     assetsDir: string
-  ): Promise<Map<string, string>> {
-    const mapping = new Map<string, string>();
+  ): Promise<Map<string, DownloadResult>> {
+    // Reset failures for this batch
+    this.failures = [];
+
+    // Ensure assets directory exists
+    await fs.mkdir(assetsDir, { recursive: true });
+
+    const mapping = new Map<string, DownloadResult>();
 
     for (let i = 0; i < images.length; i++) {
       const image = images[i];
       const ext = this.getExtension(image.url);
       const filename = `${String(i + 1).padStart(3, '0')}.${ext}`;
+      const filepath = join(assetsDir, filename);
 
-      // Download logic will be implemented with Playwright
-      mapping.set(image.url, `./assets/${filename}`);
+      // Download with retry
+      const result = await this.downloadWithRetry(image.url, filepath, filename);
+      mapping.set(image.url, result);
+
+      // Track failures
+      if (result.status === 'failed') {
+        this.failures.push({
+          url: image.url,
+          filename,
+          reason: result.error?.reason || '未知错误',
+          attempts: 3
+        });
+      }
     }
 
     return mapping;
@@ -168,5 +188,9 @@ export class AssetDownloader {
       return '连接失败';
     }
     return '下载失败';
+  }
+
+  getFailures(): DownloadError[] {
+    return [...this.failures];
   }
 }
