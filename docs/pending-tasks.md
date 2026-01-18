@@ -75,7 +75,37 @@
 
 ---
 
-### 2. 微信公众号适配器 / WeChat Official Account Adapter
+### 2. 图片位置修复 / Image Position Fix
+
+**优先级:** 🟡 P1
+
+**问题描述:**
+当前 Twitter 和可能其他平台的图片全部追加在文章末尾，而不是在原始位置。例如：
+- 原文: "文字第一段 [图1] 文字第二段 [图2]"
+- 当前: "文字第一段 文字第二段 [图1] [图2]"
+- 期望: "文字第一段 [图1] 文字第二段 [图2]"
+
+**根本原因:**
+- Twitter adapter 的 `block-builder.ts` 先提取文字，再批量添加图片
+- 图片位置信息在 API 中丢失
+- 需要从原始 HTML 中按 DOM 顺序解析
+
+**实现方案:**
+1. **Phase 1 - 修复 Twitter**: 重构 `html-to-blocks.ts` 按 DOM 顺序遍历
+2. **Phase 2 - 添加 blockId**: 给 `AssetImage` 添加 `blockId` 和 `position` 字段
+3. **Phase 3 - 验证 Zhihu**: 检查知乎图片位置是否正确
+
+**文件:**
+- `src/core/extract/adapters/twitter/html-to-blocks.ts`
+- `src/core/extract/adapters/twitter/block-builder.ts`
+- `src/core/types/index.ts` (AssetImage 接口)
+
+**设计文档:**
+- `docs/plans/2026-01-18-image-position-fix-design.md`
+
+---
+
+### 3. 微信公众号适配器 / WeChat Official Account Adapter
 
 **优先级:** 🔴 P0 阻塞
 
@@ -114,7 +144,7 @@ $('.rich_media_meta_text')       // 作者/日期
 
 ---
 
-### 3. 队列系统实现 / Queue System Implementation
+### 4. 队列系统实现 / Queue System Implementation
 
 **优先级:** 🔴 P0 阻塞
 
@@ -154,7 +184,7 @@ clip clear               # 清空队列
 
 ---
 
-### 4. 批量归档功能 / Batch Archive Feature
+### 5. 批量归档功能 / Batch Archive Feature
 
 **优先级:** 🔴 P0 阻塞
 
@@ -199,7 +229,7 @@ https://mp.weixin.qq.com/s/xxx
 
 ---
 
-### 5. 去重逻辑实现 / Deduplication Logic
+### 6. 去重逻辑实现 / Deduplication Logic
 
 **优先级:** 🔴 P0 阻塞
 
@@ -245,7 +275,7 @@ clip once "url" --version # 版本化保存 (v1, v2...)
 
 ---
 
-### 6. JSONL 流式输出 / JSONL Stream Output
+### 7. JSONL 流式输出 / JSONL Stream Output
 
 **优先级:** 🔴 P0 阻塞
 
@@ -283,7 +313,7 @@ clip run --file urls.txt --jsonl | jq '.title'
 
 ## 常规待办任务
 
-### 7. 重构浏览器策略 / Refactor Browser Strategy
+### 8. 重构浏览器策略 / Refactor Browser Strategy
 
 **优先级:** 高 / High
 
@@ -328,7 +358,7 @@ clip once "https://x.com/...status/123" --browser edge
 
 ---
 
-### 8. 测试 CDP 连接功能 / Test CDP Connection
+### 9. 测试 CDP 连接功能 / Test CDP Connection
 
 **优先级:** 高 / High
 
@@ -351,7 +381,7 @@ clip once "https://x.com/...status/123" --browser edge
 
 ---
 
-### 9. 配置文件支持 / Configuration File Support
+### 10. 配置文件支持 / Configuration File Support
 
 **优先级:** 高 / High
 
@@ -402,7 +432,7 @@ clip once "url" --out "./custom"
 
 ---
 
-### 10. 修复可能的 Zhihu 选择器问题 / Fix Zhihu Selectors if Needed
+### 11. 修复可能的 Zhihu 选择器问题 / Fix Zhihu Selectors if Needed
 
 **优先级:** 中 / Medium
 
@@ -431,7 +461,7 @@ $('.Post-RichText')
 
 ---
 
-### 11. 实现 parseFromRawState / Implement Raw State Parsing
+### 12. 实现 parseFromRawState / Implement Raw State Parsing
 
 **优先级:** 中 / Medium
 
@@ -447,7 +477,7 @@ $('.Post-RichText')
 
 ---
 
-### 12. 单元测试 / Unit Tests
+### 13. 单元测试 / Unit Tests
 
 **优先级:** 中 / Medium
 
@@ -465,7 +495,7 @@ $('.Post-RichText')
 
 ---
 
-### 13. 改进浏览器指纹 / Improve Browser Fingerprinting
+### 14. 改进浏览器指纹 / Improve Browser Fingerprinting
 
 **优先级:** 低 / Low
 
