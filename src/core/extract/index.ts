@@ -3,3 +3,5 @@ export * from './types.js';
 export * from './registry.js';
 export * from './adapters/base.js';
 export * from './adapters/twitter.js';
+export * from './adapters/zhihu/index.js';
+export * from './adapters/wechat/index.js';

@@ -49,6 +49,7 @@ The codebase follows a **pipeline architecture** with four main layers:
 │ • PageRenderer       │            │ • BaseAdapter        │
 │   - Playwright       │            │ • TwitterAdapter     │
 │   - waitUntil:'load' │            │ • ZhihuAdapter       │
+│                      │            │ • WeChatAdapter      │
 │   - 3s delay for SPA │            │                      │
 └─────────────────────┘            │ • Multi-source        │
                                      │   extraction:       │
@@ -71,7 +72,7 @@ The codebase follows a **pipeline architecture** with four main layers:
 ## Key Data Flow
 
 1. **URL → RenderedPage**: `PageRenderer` uses Playwright to load page, waits for content, extracts raw data and HTML
-2. **RenderedPage → ClipDoc**: `Adapter` (Twitter/Zhihu) parses content into structured blocks
+2. **RenderedPage → ClipDoc**: `Adapter` (Twitter/Zhihu/WeChat) parses content into structured blocks
 3. **ClipDoc → Markdown/JSON**: Exporters generate final output files
 
 ## Critical Implementation Details
@@ -140,6 +141,12 @@ Core types in `src/core/types/index.ts`:
 - Domains: `zhihu.com`
 - Anti-bot: error code 40362 ("您当前请求存在异常，暂时限制本次访问")
 - Supports answer pages and article pages
+
+### WeChat Official Account
+- Domains: `mp.weixin.qq.com`
+- Primary selectors: `.rich_media_title`, `#js_content`, `.rich_media_meta_text`
+- Author preference: `#js_name` / `.profile_nickname` → script `nickname` → meta author
+- `published_at` parsed when available; otherwise omitted
 
 ## Documentation Guidelines
 

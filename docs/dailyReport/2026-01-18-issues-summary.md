@@ -143,12 +143,13 @@ if (options?.cdpEndpoint) {
 
 ## 六、待实现功能
 
+**更新:** 微信公众号适配器已完成并验证，移出待实现列表。
+
 | # | 功能 | 描述 | 优先级 |
 |---|------|------|--------|
-| 1 | **微信公众号适配器** | 用户最初需求之一，反爬虫更严格 | TBD |
-| 2 | **CDP 连接实现** | 连接到已登录浏览器，解决登录问题 | 高 |
-| 3 | **图片下载** | 下载远程图片到本地 assets 目录 | 中 |
-| 4 | **浏览器指纹优化** | 更真实的用户行为模拟 | 低 |
+| 1 | **CDP 连接实现** | 连接到已登录浏览器，解决登录问题 | 高 |
+| 2 | **图片下载** | 下载远程图片到本地 assets 目录 | 中 |
+| 3 | **浏览器指纹优化** | 更真实的用户行为模拟 | 低 |
 
 ---
 
@@ -163,6 +164,9 @@ if (options?.cdpEndpoint) {
 | `src/core/extract/adapters/zhihu/index.ts` | 添加 deduplicateTitle 方法 | 89-92 |
 | `src/core/extract/adapters/zhihu/parser.ts` | 添加作者名多选择器 fallback | 74-88 |
 | `src/core/export/assets.ts` | 图片下载待实现 | 19 |
+| `src/core/extract/adapters/wechat/*` | 新增公众号适配器实现 | - |
+| `src/core/render/browser.ts` | 按平台跳过 Twitter 登录提示 | - |
+| `src/core/export/path.ts` | canonical_url 回退为 source_url | - |
 
 ---
 
@@ -207,4 +211,4 @@ node dist/cli/index.js once "https://zhuanlan.zhihu.com/p/..."
 1. **立即执行:** 测试知乎链接爬取
 2. **高优先级:** 实现 CDP 连接功能
 3. **中优先级:** 实现图片下载功能
-4. **后续工作:** 根据需求决定是否实现微信公众号适配器
+4. **后续工作:** 推进资产下载与队列/批量功能

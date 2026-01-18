@@ -48,6 +48,15 @@
    - 从 `debug-twitter-*` 改为 `debug-{platform}-*`
    - 文件: `src/core/render/page.ts:70-72`
 
+8. **微信公众号适配器实现** (2026-01-18)
+   - 新增 WeChatAdapter（解析标题/作者/发布时间/正文/图片）
+   - HTML → Blocks 转换器与错误类型
+   - 注册到 AdapterRegistry
+   - 公众号昵称优先（`#js_name` / `.profile_nickname`）
+   - `published_at` 解析失败则留空
+   - 图片保留原始链接（下载待实现）
+   - 文件: `src/core/extract/adapters/wechat/*`
+
 ---
 
 ## 未完成任务 / Pending Tasks
@@ -102,46 +111,7 @@ async downloadImages(images: AssetImage[], assetsDir: string): Promise<Map<strin
 
 ---
 
-### 2. 微信公众号适配器 / WeChat Official Account Adapter
-
-**优先级:** 🔴 P0 阻塞
-
-**问题描述:**
-PRD 三平台核心之一，尚未实现。微信公众号反爬虫严格，需要登录态。
-
-**考虑事项:**
-- 微信公众号的反爬虫机制严格
-- 需要登录才能访问大部分内容
-- 可能需要 CDP 连接作为基本要求
-- 支持 md + html 双轨输出（保真）
-
-**文件结构:**
-```
-src/core/extract/adapters/wechat/
-├── index.ts          # WeChatAdapter 主适配器
-├── parser.ts         # HTML 解析器
-├── html-to-blocks.ts # HTML 转 Blocks
-└── errors.ts         # WeChatExtractError 错误类
-```
-
-**关键选择器:**
-```typescript
-// 微信公众号正文
-$('.rich_media_title')           // 标题
-$('#js_content')                 // 正文内容
-$('.rich_media_meta_text')       // 作者/日期
-```
-
-**实现步骤:**
-1. 创建 WeChatAdapter 继承 BaseAdapter
-2. 实现 `canHandle()` 识别 `mp.weixin.qq.com`
-3. 实现内容提取（标题、作者、正文、图片）
-4. 实现图片下载（防盗链处理）
-5. 注册到 AdapterRegistry
-
----
-
-### 3. 队列系统实现 / Queue System Implementation
+### 2. 队列系统实现 / Queue System Implementation
 
 **优先级:** 🔴 P0 阻塞
 
@@ -181,7 +151,7 @@ clip clear               # 清空队列
 
 ---
 
-### 4. 批量归档功能 / Batch Archive Feature
+### 3. 批量归档功能 / Batch Archive Feature
 
 **优先级:** 🔴 P0 阻塞
 
@@ -226,7 +196,7 @@ https://mp.weixin.qq.com/s/xxx
 
 ---
 
-### 5. 去重逻辑实现 / Deduplication Logic
+### 4. 去重逻辑实现 / Deduplication Logic
 
 **优先级:** 🔴 P0 阻塞
 
@@ -272,7 +242,7 @@ clip once "url" --version # 版本化保存 (v1, v2...)
 
 ---
 
-### 6. JSONL 流式输出 / JSONL Stream Output
+### 5. JSONL 流式输出 / JSONL Stream Output
 
 **优先级:** 🔴 P0 阻塞
 
@@ -310,7 +280,7 @@ clip run --file urls.txt --jsonl | jq '.title'
 
 ## 常规待办任务
 
-### 7. 重构浏览器策略 / Refactor Browser Strategy
+### 6. 重构浏览器策略 / Refactor Browser Strategy
 
 **优先级:** 高 / High
 
@@ -355,7 +325,7 @@ clip once "https://x.com/...status/123" --browser edge
 
 ---
 
-### 8. 测试 CDP 连接功能 / Test CDP Connection
+### 7. 测试 CDP 连接功能 / Test CDP Connection
 
 **优先级:** 高 / High
 
@@ -378,7 +348,7 @@ clip once "https://x.com/...status/123" --browser edge
 
 ---
 
-### 9. 配置文件支持 / Configuration File Support
+### 8. 配置文件支持 / Configuration File Support
 
 **优先级:** 高 / High
 
@@ -429,7 +399,7 @@ clip once "url" --out "./custom"
 
 ---
 
-### 10. 修复可能的 Zhihu 选择器问题 / Fix Zhihu Selectors if Needed
+### 9. 修复可能的 Zhihu 选择器问题 / Fix Zhihu Selectors if Needed
 
 **优先级:** 中 / Medium
 
@@ -458,7 +428,7 @@ $('.Post-RichText')
 
 ---
 
-### 11. 实现 parseFromRawState / Implement Raw State Parsing
+### 10. 实现 parseFromRawState / Implement Raw State Parsing
 
 **优先级:** 中 / Medium
 
@@ -474,7 +444,7 @@ $('.Post-RichText')
 
 ---
 
-### 12. 单元测试 / Unit Tests
+### 11. 单元测试 / Unit Tests
 
 **优先级:** 中 / Medium
 
@@ -492,7 +462,7 @@ $('.Post-RichText')
 
 ---
 
-### 13. 改进浏览器指纹 / Improve Browser Fingerprinting
+### 12. 改进浏览器指纹 / Improve Browser Fingerprinting
 
 **优先级:** 低 / Low
 
@@ -539,7 +509,7 @@ $('.Post-RichText')
 2. **根据测试结果:**
    - 如果成功: 提取用户请求的 Zhihu 内容
    - 如果失败: 调试选择器或进一步优化浏览器指纹
-3. **后续工作:** 根据用户需求决定是否实现微信公众号
+3. **后续工作:** 推进资产下载与队列/批量功能
 
 ---
 
