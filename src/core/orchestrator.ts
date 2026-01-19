@@ -10,6 +10,7 @@ import { ClipError, ErrorCode, createExportResult } from './errors.js';
 import type { ExportOptions, ExportResult } from './export/types.js';
 import type { DownloadResult, DownloadError } from './export/assets.js';
 import { generateOutputPaths } from './export/path.js';
+import { DedupeManager } from './dedupe/index.js';
 
 export class ClipOrchestrator {
   private browserManager: BrowserManager;
@@ -26,6 +27,35 @@ export class ClipOrchestrator {
 
     const normalizedUrl = normalizeUrl(url);
 
+    // Initialize deduplication manager
+    const deduper = new DedupeManager(options.outputDir);
+    await deduper.load();
+
+    // Level 1 Check: URL-based quick check (before launching browser)
+    const urlCheckResult = await deduper.checkByUrl(normalizedUrl);
+    if (urlCheckResult.isArchived && !options.force) {
+      return {
+        status: 'failed',
+        platform: 'unknown',
+        diagnostics: {
+          error: {
+            code: ErrorCode.ALREADY_ARCHIVED,
+            message: `Content already archived at: ${urlCheckResult.record!.path}`,
+            retryable: false,
+            suggestion: 'Use --force to overwrite the existing archive',
+          },
+        },
+      };
+    }
+
+    // Force mode: remove old record if it exists
+    if (options.force && urlCheckResult.isArchived) {
+      if (options.verbose) {
+        console.log(`[Dedupe] Removing old archive record: ${urlCheckResult.record!.path}`);
+      }
+      await deduper.removeRecord(normalizedUrl);
+    }
+
     // Launch browser
     const context = await this.browserManager.launch(normalizedUrl);
 
@@ -39,6 +69,31 @@ export class ClipOrchestrator {
       // Extract
       const adapter = registry.select(normalizedUrl);
       const { doc } = await adapter.extract(page);
+
+      // Level 2 Check: Document-based precise check (after extraction)
+      const docCheckResult = await deduper.checkByDoc(doc);
+      if (docCheckResult.isArchived && !options.force) {
+        if (options.verbose) {
+          console.log(`[Dedupe] Content already archived (canonical URL match)`);
+          console.log(`[Dedupe] Existing record: ${docCheckResult.record!.path}`);
+          console.log(`[Dedupe] Original URL: ${normalizedUrl}`);
+          console.log(`[Dedupe] Canonical URL: ${doc.canonicalUrl}`);
+        }
+        return {
+          status: 'failed',
+          platform: doc.platform,
+          canonicalUrl: doc.canonicalUrl,
+          title: doc.title,
+          diagnostics: {
+            error: {
+              code: ErrorCode.ALREADY_ARCHIVED,
+              message: `Content already archived at: ${docCheckResult.record!.path}`,
+              retryable: false,
+              suggestion: 'Use --force to overwrite the existing archive',
+            },
+          },
+        };
+      }
 
       // Export
       const markdownGen = new MarkdownGenerator();
@@ -62,6 +117,21 @@ export class ClipOrchestrator {
 
       // Generate markdown (pass failures)
       await markdownGen.generate(doc, options.outputDir, assetMapping, assetFailures);
+
+      // Calculate relative path for archive record
+      const relativePath = markdownPath.replace(options.outputDir, '.').replace(/^\/+/, '');
+
+      // Add archive record after successful export
+      await deduper.addRecord(doc, relativePath);
+
+      if (options.verbose) {
+        console.log(`[Dedupe] Archive record added: ${relativePath}`);
+        console.log(`[Dedupe] Platform: ${doc.platform}`);
+        console.log(`[Dedupe] Source URL: ${doc.sourceUrl}`);
+        if (doc.canonicalUrl) {
+          console.log(`[Dedupe] Canonical URL: ${doc.canonicalUrl}`);
+        }
+      }
 
       // Build result
       const stats = {
