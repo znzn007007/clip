@@ -11,6 +11,10 @@ export interface ExportOptions {
   json: boolean;
   cdpEndpoint?: string;  // Chrome DevTools Protocol endpoint for connecting to existing browser
   debug?: boolean;
+
+  // 去重相关
+  force?: boolean;      // 强制覆盖已归档内容
+  verbose?: boolean;    // 详细输出模式
 }
 
 export interface ExportPaths {
