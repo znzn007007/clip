@@ -61,4 +61,5 @@ export enum ErrorCode {
   RATE_LIMITED = 'rate_limited',
   INVALID_URL = 'invalid_url',
   UNSUPPORTED_PLATFORM = 'unsupported_platform',
+  ALREADY_ARCHIVED = 'already_archived',
 }
