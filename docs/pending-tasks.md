@@ -1,14 +1,14 @@
 # 未完成任务 / Pending Tasks
 
-**Date:** 2026-01-18
+**Date:** 2026-01-19
 **Status:** Active
-**Project Completion:** ~92%
+**Project Completion:** ~95%
 
 ---
 
 ## 当前状态 / Current Status
 
-### 最近已完成 (2026-01-18)
+### 最近已完成 (2026-01-19)
 
 1. **资产下载实现** - 两层 fallback、3 次重试、失败追踪
 2. **批量处理系统** - BatchRunner、CLI 统一重构、JSONL 输出
@@ -16,62 +16,15 @@
 4. **Twitter 长推文修复** - 多种 DOM 提取方法
 5. **页面等待策略优化** - waitUntil: 'load' + 3s 延迟
 6. **CDP 浏览器连接** - `--cdp` 选项支持
+7. **去重逻辑实现** - DedupeManager、两级检查、--force 选项
 
 ---
 
 ## 未完成任务 / Pending Tasks
 
-## P0 阻塞任务（必须完成）
-
-### 1. 去重逻辑实现 / Deduplication Logic
-
-**优先级:** 🔴 P0 阻塞
-
-**问题描述:**
-避免重复归档同一内容，基于 canonical_url 或 normalize(url)。
-
-**文件:**
-- `src/core/dedupe/index.ts`
-- `~/.clip/archived.json` (去重记录)
-
-**去重键:**
-```typescript
-// 优先 canonicalUrl
-if (doc.canonicalUrl && hasArchived(doc.canonicalUrl)) {
-  return 'duplicate';
-}
-
-// 其次 normalize(sourceUrl)
-const normalized = normalizeUrl(doc.sourceUrl);
-if (hasArchived(normalized)) {
-  return 'duplicate';
-}
-```
-
-**存储格式:**
-```json
-{
-  "archived": {
-    "https://x.com/user/status/123": {
-      "firstSeen": "2026-01-18T10:00:00Z",
-      "path": "./twitter/2026/01/18/abc/"
-    }
-  }
-}
-```
-
-**CLI 选项:**
-```bash
-clip "url"          # 遇到重复跳过
-clip "url" --force  # 强制覆盖
-clip "url" --version # 版本化保存 (v1, v2...)
-```
-
----
-
 ## P1 高优先级
 
-### 2. 图片位置修复 / Image Position Fix
+### 1. 图片位置修复 / Image Position Fix
 
 **优先级:** 🟡 P1
 
@@ -98,7 +51,7 @@ clip "url" --version # 版本化保存 (v1, v2...)
 
 ---
 
-### 3. 重构浏览器策略 / Refactor Browser Strategy
+### 2. 重构浏览器策略 / Refactor Browser Strategy
 
 **优先级:** 高 / High
 
@@ -131,7 +84,7 @@ clip "url" --browser edge
 
 ---
 
-### 4. 测试 CDP 连接功能 / Test CDP Connection
+### 3. 测试 CDP 连接功能 / Test CDP Connection
 
 **优先级:** 高 / High
 
@@ -154,7 +107,7 @@ clip "url" --browser edge
 
 ---
 
-### 5. 配置文件支持 / Configuration File Support
+### 4. 配置文件支持 / Configuration File Support
 
 **优先级:** 高 / High
 
@@ -197,6 +150,33 @@ clip "url" --out "./custom"  # → 输出到 ./custom/
 ---
 
 ## P2 中优先级
+
+### 5. npm 发布准备 / Prepare for npm Publishing
+
+**优先级:** 🟢 P2
+
+**任务描述:**
+完成项目发布到 npm 的准备工作。
+
+**检查清单:**
+1. **包名检查** - 确认 `clip-client` 名称可用，或确定替代名称
+2. **package.json 补充** - 添加 `files`、`repository`、`bugs`、`homepage`、`engines` 字段
+3. **.npmignore 文件** - 排除不需要发布的文件（src、tests、*.ts 等）
+4. **README.md 完善** - 添加 npm 安装说明、使用示例
+5. **预发布测试** - `npm pack --dry-run` 验证打包内容
+
+**发布命令:**
+```bash
+npm login
+npm run build
+npm publish --access public
+```
+
+**参考:**
+- https://docs.npmjs.com/cli/v9/commands/npm-publish
+- https://docs.npmjs.com/cli/v9/configuring-npm/package-json
+
+---
 
 ### 6. 修复可能的 Zhihu 选择器问题 / Fix Zhihu Selectors if Needed
 
@@ -340,6 +320,7 @@ clip queue clear         # 清空队列
 | 提取层 | 96% | Twitter ✅ / Zhihu 90% / WeChat ✅ |
 | 导出层 | 100% | ✅ Markdown / JSON / 资源下载 |
 | 批处理 | 100% | ✅ BatchRunner 完整实现 |
+| 去重系统 | 100% | ✅ DedupeManager 完整实现 |
 
-**整体完成度: ~92%**
-**测试覆盖: 123/123 通过**
+**整体完成度: ~95%**
+**测试覆盖: 358/358 通过**
