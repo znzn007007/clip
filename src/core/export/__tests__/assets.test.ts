@@ -2,6 +2,9 @@
 import { AssetDownloader, type DownloadResult } from '../assets.js';
 import type { BrowserContext } from 'playwright';
 import type { AssetImage } from '../../types/index.js';
+import * as fs from 'fs/promises';
+
+jest.mock('fs/promises');
 
 describe('AssetDownloader', () => {
   let downloader: AssetDownloader;
@@ -17,9 +20,13 @@ describe('AssetDownloader', () => {
 
     mockContext = {
       newPage: jest.fn().mockResolvedValue(mockPage),
+      request: { get: jest.fn() },
     } as any;
 
     downloader = new AssetDownloader(mockContext);
+
+    (fs.mkdir as jest.Mock).mockResolvedValue(undefined);
+    (fs.writeFile as jest.Mock).mockResolvedValue(undefined);
   });
 
   afterEach(() => {
@@ -338,6 +345,31 @@ describe('AssetDownloader', () => {
       expect(result.path).toBe('./assets/001.jpg');
       expect(result.attempts).toBe(1);
     });
+
+    it('should succeed via fetch fallback when context download fails', async () => {
+      const url = 'https://example.com/image.jpg';
+      const filepath = '/test/assets/001.jpg';
+
+      jest.spyOn(downloader as any, 'tryContextDownload').mockRejectedValue(new Error('context fail'));
+      jest.spyOn(downloader as any, 'tryFetchDownload').mockResolvedValue(undefined);
+
+      const result = await (downloader as any).downloadWithRetry(url, filepath, '001.jpg');
+
+      expect(result.status).toBe('success');
+      expect(result.path).toBe('./assets/001.jpg');
+      expect(result.attempts).toBe(1);
+    });
+  });
+
+  describe('sleep', () => {
+    it('resolves after the timeout', async () => {
+      jest.useFakeTimers();
+      const sleepPromise = (downloader as any).sleep(10);
+
+      jest.advanceTimersByTime(10);
+      await expect(sleepPromise).resolves.toBeUndefined();
+      jest.useRealTimers();
+    });
   });
 
   describe('getExtension', () => {
@@ -377,6 +409,80 @@ describe('AssetDownloader', () => {
 
       expect((downloader as any).getExtension('image.JPG')).toBe('jpg');
       expect((downloader as any).getExtension('image.PNG')).toBe('png');
+    });
+  });
+
+  describe('tryFetchDownload', () => {
+    it('throws when response is not ok', async () => {
+      const response = {
+        ok: () => false,
+        status: () => 404,
+        body: jest.fn(),
+      };
+      (mockContext.request.get as jest.Mock).mockResolvedValue(response);
+
+      await expect((downloader as any).tryFetchDownload('https://example.com/img.jpg', '/tmp/img.jpg'))
+        .rejects.toThrow('HTTP 404');
+    });
+
+    it('writes file when response is ok', async () => {
+      const response = {
+        ok: () => true,
+        status: () => 200,
+        body: jest.fn().mockResolvedValue(Buffer.from('data')),
+      };
+      (mockContext.request.get as jest.Mock).mockResolvedValue(response);
+
+      await (downloader as any).tryFetchDownload('https://example.com/img.jpg', '/tmp/img.jpg');
+
+      expect(fs.writeFile).toHaveBeenCalledWith('/tmp/img.jpg', expect.any(Buffer));
+    });
+  });
+
+  describe('tryContextDownload', () => {
+    it('throws when response is not ok and always closes page', async () => {
+      const response = {
+        ok: () => false,
+        status: () => 500,
+        body: jest.fn(),
+      };
+      mockPage.goto.mockResolvedValue(response);
+
+      await expect((downloader as any).tryContextDownload('https://example.com/img.jpg', '/tmp/img.jpg'))
+        .rejects.toThrow('HTTP 500');
+
+      expect(mockPage.close).toHaveBeenCalledTimes(1);
+    });
+
+    it('writes file when response is ok and closes page', async () => {
+      const response = {
+        ok: () => true,
+        status: () => 200,
+        body: jest.fn().mockResolvedValue(Buffer.from('data')),
+      };
+      mockPage.goto.mockResolvedValue(response);
+
+      await (downloader as any).tryContextDownload('https://example.com/img.jpg', '/tmp/img.jpg');
+
+      expect(fs.writeFile).toHaveBeenCalledWith('/tmp/img.jpg', expect.any(Buffer));
+      expect(mockPage.close).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('formatErrorReason', () => {
+    it('maps common errors to localized reasons', () => {
+      const downloader = new AssetDownloader(mockContext);
+
+      expect((downloader as any).formatErrorReason('timeout')).toBe('网络超时');
+      expect((downloader as any).formatErrorReason('HTTP 404')).toBe('404 Not Found');
+      expect((downloader as any).formatErrorReason('HTTP 403')).toBe('访问被拒绝');
+      expect((downloader as any).formatErrorReason('ECONNREFUSED')).toBe('连接失败');
+    });
+
+    it('falls back to generic reason', () => {
+      const downloader = new AssetDownloader(mockContext);
+      expect((downloader as any).formatErrorReason('something else')).toBe('下载失败');
+      expect((downloader as any).formatErrorReason('HTTP 401')).toBe('访问被拒绝');
     });
   });
 });

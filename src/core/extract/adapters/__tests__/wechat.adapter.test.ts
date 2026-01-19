@@ -146,5 +146,25 @@ describe('WeChatAdapter', () => {
 
       await expect(adapter.extract(page)).rejects.toBeInstanceOf(WeChatExtractError);
     });
+
+    it('should wrap unexpected errors as PARSE_FAILED', async () => {
+      const page: RenderedPage = {
+        url: 'https://mp.weixin.qq.com/s/error',
+        canonicalUrl: 'https://mp.weixin.qq.com/s/error',
+        title: 'Error',
+        html: mockHtml,
+        platform: 'wechat' as Platform,
+      };
+
+      jest.spyOn((adapter as any).parser, 'parseFromCheerio')
+        .mockImplementation(() => {
+          throw new Error('boom');
+        });
+
+      await expect(adapter.extract(page)).rejects.toMatchObject({
+        name: 'WeChatExtractError',
+        code: 'PARSE_FAILED',
+      });
+    });
   });
 });

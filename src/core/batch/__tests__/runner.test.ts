@@ -1,15 +1,26 @@
 // src/core/batch/__tests__/runner.test.ts
+import { readFile } from 'node:fs/promises';
 import { BatchRunner } from '../runner.js';
 import { BrowserManager } from '../../render/browser.js';
+import { PageRenderer } from '../../render/page.js';
+import { registry } from '../../extract/registry.js';
+import { MarkdownGenerator } from '../../export/markdown.js';
+import { AssetDownloader } from '../../export/assets.js';
+import { generateOutputPaths } from '../../export/path.js';
+import { buildExportResult } from '../../export/json.js';
+import { isValidUrl, normalizeUrl } from '../../render/utils.js';
 import { ClipError } from '../../errors.js';
+import { ErrorCode } from '../../export/types.js';
 import { DedupeManager } from '../../dedupe/index.js';
 
 // Mock BrowserManager
+jest.mock('node:fs/promises');
 jest.mock('../../render/browser.js');
 jest.mock('../../render/page.js');
 jest.mock('../../extract/registry.js');
 jest.mock('../../export/markdown.js');
 jest.mock('../../export/assets.js');
+jest.mock('../../export/json.js');
 jest.mock('../../export/path.js');
 jest.mock('../../render/utils.js');
 jest.mock('../../dedupe/index.js');
@@ -37,6 +48,8 @@ describe('BatchRunner', () => {
     } as any;
 
     (BrowserManager as jest.MockedClass<typeof BrowserManager>).mockImplementation(() => mockBrowserManager);
+    (isValidUrl as jest.Mock).mockReturnValue(true);
+    (normalizeUrl as jest.Mock).mockImplementation((url: string) => url);
 
     // Setup mock DedupeManager
     mockDedupeManager = {
@@ -51,6 +64,38 @@ describe('BatchRunner', () => {
   });
 
   describe('parseUrls', () => {
+    it('should read URLs from file when source is file', async () => {
+      (readFile as jest.Mock).mockResolvedValue(
+        'https://x.com/status/123\n# comment\nhttps://zhihu.com/question/456\n'
+      );
+
+      const urls = await runner.parseUrls('file', 'urls.txt');
+
+      expect(readFile).toHaveBeenCalledWith('urls.txt', 'utf-8');
+      expect(urls).toEqual([
+        'https://x.com/status/123',
+        'https://zhihu.com/question/456',
+      ]);
+    });
+
+    it('should read URLs from stdin when source is stdin', async () => {
+      const originalIterator = (process.stdin as any)[Symbol.asyncIterator];
+      (process.stdin as any)[Symbol.asyncIterator] = async function* () {
+        yield Buffer.from('https://x.com/status/1\n# comment\n');
+        yield Buffer.from('https://zhihu.com/question/2\n');
+      };
+
+      try {
+        const urls = await runner.parseUrls('stdin');
+        expect(urls).toEqual([
+          'https://x.com/status/1',
+          'https://zhihu.com/question/2',
+        ]);
+      } finally {
+        (process.stdin as any)[Symbol.asyncIterator] = originalIterator;
+      }
+    });
+
     it('should parse URLs from file content', async () => {
       const content =
         'https://x.com/status/123\n' +
@@ -408,6 +453,154 @@ describe('BatchRunner', () => {
       );
 
       consoleLogSpy.mockRestore();
+    });
+  });
+
+  describe('processUrl', () => {
+    const options = {
+      source: 'file' as const,
+      filePath: 'test.txt',
+      continueOnError: false,
+      jsonl: false,
+      outputDir: '/test/output',
+      format: 'md' as const,
+      downloadAssets: false,
+    };
+    const checkResult = { isArchived: false } as any;
+
+    const doc = {
+      platform: 'twitter',
+      canonicalUrl: 'https://x.com/status/123',
+      title: 'Test',
+      author: 'Author',
+      publishedAt: '2026-01-01',
+      fetchedAt: '2026-01-02',
+      blocks: [{ type: 'paragraph', text: 'Hello' }],
+      assets: { images: [{ url: 'https://img.example/test.jpg', alt: 'img' }] },
+    } as any;
+
+    it('throws ClipError on invalid URL', async () => {
+      (isValidUrl as jest.Mock).mockReturnValue(false);
+
+      await expect(
+        runner['processUrl']('not-a-url', mockContext, options, checkResult)
+      ).rejects.toMatchObject({
+        code: ErrorCode.INVALID_URL,
+      });
+    });
+
+    it('runs full pipeline with asset downloads enabled', async () => {
+      const page = { html: '<html></html>' };
+      const renderMock = jest.fn().mockResolvedValue(page);
+      (PageRenderer as jest.MockedClass<typeof PageRenderer>).mockImplementation(() => ({
+        render: renderMock,
+      }) as any);
+
+      const extractMock = jest.fn().mockResolvedValue({ doc });
+      (registry.select as jest.Mock).mockReturnValue({ extract: extractMock });
+
+      const downloadImagesMock = jest.fn().mockResolvedValue(new Map());
+      const assetFailures = [
+        { url: 'https://img.example/fail.jpg', filename: '001.jpg', reason: '下载失败', attempts: 3 },
+      ];
+      const getFailuresMock = jest.fn().mockReturnValue(assetFailures);
+      (AssetDownloader as jest.MockedClass<typeof AssetDownloader>).mockImplementation(() => ({
+        downloadImages: downloadImagesMock,
+        getFailures: getFailuresMock,
+      }) as any);
+
+      const generateMock = jest.fn().mockResolvedValue(undefined);
+      (MarkdownGenerator as jest.MockedClass<typeof MarkdownGenerator>).mockImplementation(() => ({
+        generate: generateMock,
+      }) as any);
+
+      (generateOutputPaths as jest.Mock).mockResolvedValue({
+        markdownPath: '/test/output/test.md',
+        assetsDir: '/test/output/assets',
+      });
+
+      const exportResult = { status: 'success' };
+      (buildExportResult as jest.Mock).mockReturnValue(exportResult);
+
+      const result = await runner['processUrl']('https://x.com/status/123', mockContext, {
+        ...options,
+        downloadAssets: true,
+      }, checkResult);
+
+      expect(renderMock).toHaveBeenCalledWith('https://x.com/status/123', { debug: false });
+      expect(extractMock).toHaveBeenCalledWith(page);
+      expect(downloadImagesMock).toHaveBeenCalledWith(doc.assets.images, '/test/output/assets');
+      expect(generateMock).toHaveBeenCalledWith(doc, options.outputDir, expect.any(Map), assetFailures);
+      expect(buildExportResult).toHaveBeenCalledWith(
+        doc,
+        { markdownPath: '/test/output/test.md', assetsDir: '/test/output/assets' },
+        { wordCount: doc.blocks.length, imageCount: doc.assets.images.length },
+        assetFailures
+      );
+      expect(result).toBe(exportResult);
+    });
+
+    it('skips asset downloads when disabled', async () => {
+      const page = { html: '<html></html>' };
+      (PageRenderer as jest.MockedClass<typeof PageRenderer>).mockImplementation(() => ({
+        render: jest.fn().mockResolvedValue(page),
+      }) as any);
+
+      (registry.select as jest.Mock).mockReturnValue({
+        extract: jest.fn().mockResolvedValue({ doc }),
+      });
+
+      const downloadImagesMock = jest.fn().mockResolvedValue(new Map());
+      (AssetDownloader as jest.MockedClass<typeof AssetDownloader>).mockImplementation(() => ({
+        downloadImages: downloadImagesMock,
+        getFailures: jest.fn().mockReturnValue([]),
+      }) as any);
+
+      (MarkdownGenerator as jest.MockedClass<typeof MarkdownGenerator>).mockImplementation(() => ({
+        generate: jest.fn().mockResolvedValue(undefined),
+      }) as any);
+
+      (generateOutputPaths as jest.Mock).mockResolvedValue({
+        markdownPath: '/test/output/test.md',
+        assetsDir: '/test/output/assets',
+      });
+
+      (buildExportResult as jest.Mock).mockReturnValue({ status: 'success' });
+
+      await runner['processUrl']('https://x.com/status/123', mockContext, options, checkResult);
+
+      expect(downloadImagesMock).not.toHaveBeenCalled();
+    });
+
+    it('returns failed ExportResult for ClipError', async () => {
+      const page = { html: '<html></html>' };
+      (PageRenderer as jest.MockedClass<typeof PageRenderer>).mockImplementation(() => ({
+        render: jest.fn().mockResolvedValue(page),
+      }) as any);
+
+      (registry.select as jest.Mock).mockReturnValue({
+        extract: jest.fn().mockRejectedValue(new ClipError(ErrorCode.NETWORK_ERROR, 'boom')),
+      });
+
+      const result = await runner['processUrl']('https://x.com/status/123', mockContext, options, checkResult);
+
+      expect(result.status).toBe('failed');
+      expect(result.diagnostics?.error?.code).toBe(ErrorCode.NETWORK_ERROR);
+    });
+
+    it('rethrows non-ClipError exceptions', async () => {
+      const page = { html: '<html></html>' };
+      (PageRenderer as jest.MockedClass<typeof PageRenderer>).mockImplementation(() => ({
+        render: jest.fn().mockResolvedValue(page),
+      }) as any);
+
+      (registry.select as jest.Mock).mockReturnValue({
+        extract: jest.fn().mockRejectedValue(new Error('boom')),
+      });
+
+      await expect(
+        runner['processUrl']('https://x.com/status/123', mockContext, options, checkResult)
+      ).rejects.toThrow('boom');
     });
   });
 });

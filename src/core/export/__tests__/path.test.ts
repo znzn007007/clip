@@ -145,6 +145,17 @@ describe('export/path', () => {
       expect(result).not.toContain('published_at:');
     });
 
+    it('should format non-string fields without quotes', () => {
+      const docWithNumber: ClipDoc = {
+        ...mockDoc,
+        fetchedAt: 123 as unknown as string,
+      };
+
+      const result = buildFrontMatter(docWithNumber);
+
+      expect(result).toContain('fetched_at: 123');
+    });
+
     it('should properly format YAML with correct delimiters', () => {
       const result = buildFrontMatter(mockDoc);
 
