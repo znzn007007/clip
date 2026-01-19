@@ -31,27 +31,33 @@ rawData/DOM → TweetData → TwitterBlockBuilder.tweetToBlocks()
 
 ### 整体架构
 
-采用**主路径 + Fallback** 的双路径设计：
+采用**主路径 + Fallback** 的三路径设计：
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                     TwitterAdapter                           │
 │                                                              │
-│  Path 1 (Primary):                                           │
+│  Path 1 (Primary - HTML):                                    │
 │    RenderedPage.html → TwitterHtmlToBlocks → Block[]         │
 │    ✅ 图片在正确位置                                         │
 │                                                              │
-│  Path 2 (Fallback):                                          │
+│  Path 2 (Metadata Extraction):                               │
+│    rawData/DOM → TweetData → 提取 author/publishedAt        │
+│    (仅用于元数据，不用于 blocks)                             │
+│                                                              │
+│  Path 3 (Last Resort):                                       │
 │    rawData → TweetData → TwitterBlockBuilder → Block[]       │
-│    ⚠️ 图片在末尾，但保证基本功能可用                        │
+│    ⚠️ 图片在末尾，保证基本可用                              │
 └─────────────────────────────────────────────────────────────┘
 ```
 
 ### 设计原则
 
-1. **优先正确性**：默认使用 HTML 路径保证图片位置正确
-2. **保持可用性**：rawData 路径作为 fallback，确保即使 HTML 解析失败也能工作
-3. **代码一致性**：与 Zhihu/WeChat 保持相同的 HTML 解析模式
+1. **DOM 顺序为中心**：一次 DFS 遍历，遇到元素立即生成 block
+2. **Buffer 机制**：行内元素累积到 buffer，块级元素触发 flush
+3. **优先正确性**：默认使用 HTML 路径保证图片位置正确
+4. **保持可用性**：rawData 路径作为 fallback，确保即使 HTML 解析失败也能工作
+5. **多 tweet 支持**：处理所有 `article[data-testid="tweet"]`，插入 `---` 分隔符
 
 ## 实现细节
 
@@ -62,186 +68,442 @@ import * as cheerio from 'cheerio';
 import type { AnyNode, Element } from 'domhandler';
 import type { Block } from '../../../types/index.js';
 
+// Buffer token types - hashtag stores tag WITHOUT #
+type BufferToken =
+  | { type: 'text'; content: string }
+  | { type: 'link'; text: string; url: string }
+  | { type: 'hashtag'; tag: string }; // tag: "Tech" not "#Tech"
+
+// Skip selectors - precise list to avoid false positives
+const SKIP_SELECTORS = [
+  '[data-testid="User-Name"]',
+  '[data-testid="UserActions"]',
+  '[role="group"]',
+  'time',
+  'svg',
+  'header',
+  'footer',
+  'nav',
+  'aside',
+  '[data-testid="card.layoutLarge.media"]',
+  '[data-testid="reply"]',
+  '[data-testid="retweet"]',
+  '[data-testid="like"]',
+  '[data-testid="views"]',
+];
+
 export class TwitterHtmlToBlocks {
   /**
-   * Convert Twitter HTML to Block array, preserving image positions
+   * Convert Twitter HTML to Block array using DFS traversal
    */
   convert(html: string): Block[] {
     const $ = cheerio.load(html);
     const blocks: Block[] = [];
+    const buffer: BufferToken[] = [];
 
-    const $article = $('article[data-testid="tweet"]').first();
-    if ($article.length === 0) return blocks;
+    // Process all tweets on page
+    const $articles = $('article[data-testid="tweet"]');
 
-    this.processTweetContent($, $article, blocks);
+    $articles.each((_, article) => {
+      // Add separator between tweets
+      if (blocks.length > 0) {
+        this.flushBuffer(buffer, blocks);
+        blocks.push({ type: 'paragraph', content: '---' });
+      }
+
+      // DFS from article root
+      this.dfsTraverse($, $(article)[0], blocks, buffer);
+    });
+
+    // Final flush
+    this.flushBuffer(buffer, blocks);
+
     return blocks;
   }
 
-  private processTweetContent(
+  /**
+   * Core DFS: traverse DOM in order, use buffer for inline elements
+   */
+  private dfsTraverse(
     $: cheerio.CheerioAPI,
-    $container: cheerio.Cheerio<any>,
-    blocks: Block[]
+    node: AnyNode,
+    blocks: Block[],
+    buffer: BufferToken[]
   ): void {
-    const $clone = $container.clone();
-    $clone.find('[data-testid="User-Name"], [data-testid="UserActions"], [role="group"], time').remove();
+    // Skip non-content nodes
+    if (this.shouldSkipNode($, node)) return;
 
-    const $textDiv = $clone.find('[data-testid="tweetText"], [data-testid="longformRichTextComponent"]');
-
-    if ($textDiv.length > 0) {
-      this.processTextContent($, $textDiv.first(), blocks);
-    }
-
-    // Images in DOM order
-    $clone.find('img[src*="pbs.twimg.com"]').each((_, img) => {
-      const $img = $(img);
-      const url = $img.attr('src');
-      if (url && !url.includes('profile_images')) {
-        blocks.push({
-          type: 'image',
-          url: url.replace(/&name=\w+/, '&name=orig'),
-          alt: $img.attr('alt') || '',
-        });
-      }
-    });
-
-    // Videos
-    $clone.find('video').each((_, video) => {
-      const $video = $(video);
-      const src = $video.find('source').attr('src');
-      if (src) {
-        blocks.push({
-          type: 'video',
-          url: src,
-          thumbnail: $video.attr('poster'),
-        });
-      }
-    });
-
-    // Hashtags
-    $clone.find('a[href^="/hashtag/"]').each((_, a) => {
-      const tag = $(a).text().trim();
-      if (tag.startsWith('#')) {
-        blocks.push({
-          type: 'hashtag',
-          tag,
-          url: `https://x.com/hashtag/${tag.slice(1)}`,
-        });
-      }
-    });
-
-    // External links
-    $clone.find('a[href^="http"]').not('[href*="/"]').each((_, a) => {
-      blocks.push({
-        type: 'link',
-        url: $(a).attr('href') || '',
-        title: $(a).text().trim(),
-      });
-    });
-  }
-
-  private processTextContent(
-    $: cheerio.CheerioAPI,
-    $element: cheerio.Cheerio<any>,
-    blocks: Block[]
-  ): void {
-    if ($element.is('[data-testid="tweetText"]')) {
-      const text = $element.text().replace(/\s+/g, ' ').trim();
+    if (node.type === 'text') {
+      const text = (node as any).data?.replace(/\s+/g, ' ').trim();
       if (text) {
-        blocks.push({ type: 'paragraph', content: text });
+        buffer.push({ type: 'text', content: text });
       }
       return;
     }
 
-    if ($element.is('[data-testid="longformRichTextComponent"]')) {
-      this.processChildren($, $element[0], blocks);
+    if (node.type !== 'tag') return;
+
+    const $node = $(node);
+    const tagName = (node as Element).tagName?.toLowerCase();
+
+    // Handle inline elements - add to buffer
+    switch (tagName) {
+      case 'a':
+        this.handleLinkInline($node, buffer);
+        return; // Don't recurse into links
+
+      case 'br':
+        // <br> triggers flush to create paragraph break
+        this.flushBuffer(buffer, blocks);
+        return;
+
+      case 'p':
+      case 'div':
+        // Paragraph boundary - flush after processing children
+        $node.contents().each((_, child) => {
+          this.dfsTraverse($, child, blocks, buffer);
+        });
+        this.flushBuffer(buffer, blocks);
+        return;
+
+      case 'span':
+        // Transparent, continue to children
+        break;
+
+      // Handle block elements - flush buffer first
+      case 'img':
+        this.flushBuffer(buffer, blocks);
+        this.handleImage($node, blocks);
+        return;
+
+      case 'video':
+        this.flushBuffer(buffer, blocks);
+        this.handleVideo($node, blocks);
+        return;
+
+      case 'blockquote':
+        // Check if this is a quoted tweet card
+        if (this.isQuotedTweetCard($, $node)) {
+          this.flushBuffer(buffer, blocks);
+          this.handleQuotedTweet($, $node, blocks);
+          return;
+        }
+        break;
+
+      default:
+        break;
+    }
+
+    // Default: recurse into children
+    $node.contents().each((_, child) => {
+      this.dfsTraverse($, child, blocks, buffer);
+    });
+  }
+
+  private handleLinkInline($a: cheerio.Cheerio<any>, buffer: BufferToken[]): void {
+    const href = $a.attr('href');
+    const text = $a.text().trim();
+
+    if (!href) {
+      // No href - keep as plain text
+      if (text) buffer.push({ type: 'text', content: text });
+      return;
+    }
+
+    if (href.startsWith('/hashtag/')) {
+      // Hashtag - store WITHOUT #
+      const tag = text.startsWith('#') ? text.slice(1) : text;
+      buffer.push({
+        type: 'hashtag',
+        tag,
+        url: `https://x.com${href}`,
+      });
+    } else if (href.startsWith('http')) {
+      // External link
+      buffer.push({ type: 'link', text, url: href });
+    } else {
+      // Relative link - keep as plain text
+      if (text) buffer.push({ type: 'text', content: text });
     }
   }
 
-  private processChildren($: cheerio.CheerioAPI, element: AnyNode, blocks: Block[]): void {
-    $(element).contents().each((_, node) => {
-      if (node.type === 'text') {
-        const text = (node as any).data?.replace(/\s+/g, ' ').trim();
-        if (text) {
-          blocks.push({ type: 'paragraph', content: text });
-        }
-      } else if (node.type === 'tag') {
-        const $node = $(node);
-        const tagName = (node as Element).tagName?.toLowerCase();
+  private flushBuffer(buffer: BufferToken[], blocks: Block[]): void {
+    if (buffer.length === 0) return;
 
-        if (tagName === 'img') {
-          const url = $node.attr('src');
-          if (url && url.includes('pbs.twimg.com') && !url.includes('profile_images')) {
-            blocks.push({
-              type: 'image',
-              url: url.replace(/&name=\w+/, '&name=orig'),
-              alt: $node.attr('alt') || '',
-            });
-          }
-        } else {
-          this.processChildren($, node, blocks);
-        }
+    // Merge adjacent text tokens first
+    const merged: BufferToken[] = [];
+    for (const token of buffer) {
+      if (token.type === 'text' && merged.length > 0 && merged[merged.length - 1].type === 'text') {
+        merged[merged.length - 1].content += token.content;
+      } else {
+        merged.push(token);
       }
+    }
+
+    // Convert to markdown
+    let markdown = '';
+    for (const token of merged) {
+      switch (token.type) {
+        case 'text':
+          markdown += token.content;
+          break;
+        case 'link':
+          markdown += `[${token.text}](${token.url})`;
+          break;
+        case 'hashtag':
+          // Add # during rendering, tag doesn't have it
+          markdown += `[#${token.tag}](https://x.com/hashtag/${token.tag})`;
+          break;
+      }
+    }
+
+    if (markdown.trim()) {
+      blocks.push({ type: 'paragraph', content: markdown.trim() });
+    }
+
+    buffer.length = 0; // Clear buffer
+  }
+
+  private handleImage($img: cheerio.Cheerio<any>, blocks: Block[]): void {
+    const url = $img.attr('src');
+    if (!url || url.includes('profile_images')) return;
+
+    blocks.push({
+      type: 'image',
+      url: url.replace(/&name=\w+/, '&name=orig'),
+      alt: $img.attr('alt') || '',
     });
+  }
+
+  private handleVideo($video: cheerio.Cheerio<any>, blocks: Block[]): void {
+    const src = $video.find('source').attr('src');
+    if (!src) return;
+
+    blocks.push({
+      type: 'video',
+      url: src,
+      thumbnail: $video.attr('poster'),
+    });
+  }
+
+  private handleQuotedTweet(
+    $: cheerio.CheerioAPI,
+    $node: cheerio.Cheerio<any>,
+    blocks: Block[]
+  ): void {
+    // Extract text from the quoted tweet, excluding UI elements
+    const $clone = $node.clone();
+    $clone.find('[data-testid="UserActions"], [role="group"], time, svg').remove();
+
+    const text = $clone.text().trim();
+    const $link = $clone.find('a[href*="/status/"]').first();
+    const url = $link.attr('href');
+
+    blocks.push({
+      type: 'quote',
+      content: text,
+      sourceUrl: url ? `https://x.com${url}` : undefined,
+    });
+  }
+
+  private isQuotedTweetCard($: cheerio.CheerioAPI, $node: cheerio.Cheerio<any>): boolean {
+    // Check if this blockquote contains a nested tweet
+    // but is NOT the main tweet's text container
+    const hasNestedTweet = $node.find('article[data-testid="tweet"]').length > 0;
+    const isMainTweetText = $node.is('[data-testid="tweetText"]') ||
+                           $node.parent().is('[data-testid="tweetText"]');
+
+    return hasNestedTweet && !isMainTweetText;
+  }
+
+  private shouldSkipNode($: cheerio.CheerioAPI, node: AnyNode): boolean {
+    if (node.type !== 'tag') return false;
+
+    const $node = $(node);
+
+    for (const selector of SKIP_SELECTORS) {
+      if ($node.is(selector)) return true;
+    }
+
+    return false;
   }
 }
 ```
 
 ### 修改文件：`src/core/extract/adapters/twitter.ts`
 
-调整提取路径优先级：
-
 ```typescript
 export class TwitterAdapter extends BaseAdapter {
   async extract(page: RenderedPage): Promise<ExtractResult> {
-    // Path 1 (Primary): HTML → HtmlToBlocks (correct image positions)
+    const warnings: string[] = [];
+
+    // Step 1: Extract metadata first (async)
+    const metadata = await this.extractMetadata(page, warnings);
+
+    // Step 2: Generate blocks from HTML (primary path, correct positions)
     if (page.html) {
       try {
         const htmlToBlocks = new TwitterHtmlToBlocks();
         const blocks = htmlToBlocks.convert(page.html);
 
         if (blocks.length > 0) {
-          const tweet = this.extractTweetData(page);
-
           return {
             doc: {
               platform: 'twitter',
               sourceUrl: page.url,
               canonicalUrl: page.canonicalUrl,
-              title: tweet.text.slice(0, 100) + (tweet.text.length > 100 ? '...' : ''),
-              author: `@${tweet.author.screenName}`,
-              publishedAt: tweet.createdAt,
+              title: this.generateTitle(blocks, metadata.tweetData),
+              author: metadata.author,
+              publishedAt: metadata.publishedAt,
               fetchedAt: new Date().toISOString(),
               blocks,
-              assets: {
-                images: blocks
-                  .filter(b => b.type === 'image')
-                  .map(b => ({ url: b.url, alt: b.alt })),
-              },
+              assets: this.extractAssets(blocks),
             },
-            warnings: [],
+            warnings,
           };
         }
       } catch (error) {
-        // Fall through to fallback
+        const message = error instanceof Error ? error.message : String(error);
+        warnings.push(`HTML parsing failed: ${message}`);
       }
     }
 
-    // Path 2 (Fallback): rawData → TweetData → BlockBuilder (images at end)
-    // ... 现有逻辑
+    // Step 3: Fallback to rawData → BlockBuilder (images at end)
+    if (metadata.tweetData) {
+      const blocks = this.blockBuilder.tweetToBlocks(metadata.tweetData);
+      return {
+        doc: {
+          platform: 'twitter',
+          sourceUrl: page.url,
+          canonicalUrl: page.canonicalUrl,
+          title: this.generateTitle(blocks, metadata.tweetData),
+          author: metadata.author,
+          publishedAt: metadata.publishedAt,
+          fetchedAt: new Date().toISOString(),
+          blocks,
+          assets: this.extractAssets(blocks),
+        },
+        warnings: [...warnings, 'Used fallback (images at end)'],
+      };
+    }
+
+    // Step 4: Complete failure
+    throw new TwitterExtractError('All extraction methods failed', 'PARSE_FAILED');
   }
+
+  private async extractMetadata(
+    page: RenderedPage,
+    warnings: string[]
+  ): Promise<TweetMetadata> {
+    // Try rawData first
+    if (page.rawData) {
+      try {
+        const parsed = JSON.parse(page.rawData);
+        const tweets = this.parser.parseFromRawState(parsed);
+        if (tweets.length > 0) {
+          return {
+            author: `@${tweets[0].author.screenName}`,
+            publishedAt: tweets[0].createdAt,
+            tweetData: tweets[0],
+          };
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        warnings.push(`rawData parsing failed: ${message}`);
+      }
+    }
+
+    // Try DOM extraction
+    if (page.page) {
+      try {
+        const rawData = await this.domExtractor.extract(page.page);
+        const tweets = this.parser.parseFromRawState(rawData);
+        if (tweets.length > 0) {
+          return {
+            author: `@${tweets[0].author.screenName}`,
+            publishedAt: tweets[0].createdAt,
+            tweetData: tweets[0],
+          };
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        warnings.push(`DOM extraction failed: ${message}`);
+      }
+    }
+
+    // Fallback to HTML parsing for metadata only
+    if (page.html) {
+      try {
+        const $ = cheerio.load(page.html);
+        // Get @handle from href, not display name
+        const href = $('[data-testid="User-Name"] a[href^="/"]').first().attr('href');
+        const handle = href ? `@${href.slice(1)}` : '@unknown';
+
+        const $time = $('time').first();
+        const datetime = $time.attr('datetime');
+
+        return {
+          author: handle,
+          publishedAt: datetime || undefined,
+          tweetData: null,
+        };
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        warnings.push(`HTML metadata extraction failed: ${message}`);
+      }
+    }
+
+    // Complete fallback
+    return {
+      author: '@unknown',
+      publishedAt: undefined,
+      tweetData: null,
+    };
+  }
+
+  private generateTitle(blocks: Block[], tweetData: TweetData | null): string {
+    // Find first paragraph block
+    const firstParagraph = blocks.find(b => b.type === 'paragraph');
+    if (firstParagraph) {
+      const text = (firstParagraph as any).content.slice(0, 50);
+      return text.length < (firstParagraph as any).content.length ? text + '...' : text;
+    }
+
+    // Fallback to tweetData text
+    if (tweetData?.text) {
+      const text = tweetData.text.slice(0, 50);
+      return text.length < tweetData.text.length ? text + '...' : text;
+    }
+
+    return 'Unknown Tweet';
+  }
+
+  private extractAssets(blocks: Block[]): { images: AssetImage[] } {
+    const images = blocks
+      .filter(b => b.type === 'image')
+      .map(b => ({
+        url: (b as any).url,
+        alt: (b as any).alt || '',
+      }));
+    return { images };
+  }
+}
+
+interface TweetMetadata {
+  author: string;
+  publishedAt?: string;
+  tweetData: TweetData | null;
 }
 ```
 
-## 错误处理与边界情况
+## 降级策略
 
-| 情况 | 处理方式 |
-|------|---------|
-| 找不到 tweet article | 返回空数组，触发 fallback |
-| HTML 格式异常 | try-catch 捕获，触发 fallback |
-| 没有 text 内容 | 返回只有图片的 blocks |
-| 只有 text 没有图片 | 返回只有 text 的 blocks |
-| 引用推文 | 递归处理引用推文 |
-| 嵌套媒体 (gallery) | 按 DOM 顺序逐个添加 |
+| rawData/DOM | HTML blocks | 结果 |
+|-------------|-------------|------|
+| ✅ 成功 | ✅ 成功 | 正常返回（HTML blocks + rawData metadata） |
+| ✅ 成功 | ❌ 失败 | rawData fallback（BlockBuilder，图片在末尾） |
+| ❌ 失败 | ✅ 成功 | 返回（HTML blocks + HTML fallback metadata，可能 @unknown） |
+| ❌ 失败 | ❌ 失败 | 抛 PARSE_FAILED |
 
 ## 测试策略
 
@@ -249,18 +511,207 @@ export class TwitterAdapter extends BaseAdapter {
 
 **文件**: `src/core/extract/adapters/twitter/__tests__/html-to-blocks.test.ts`
 
-- 标准推文：文本 + 图片顺序正确
-- 长推文：longformRichTextComponent 嵌套处理
-- 边界情况：空 HTML、无效 HTML、profile_images 过滤
-- hashtag 和链接提取
+```typescript
+describe('TwitterHtmlToBlocks', () => {
+  describe('Buffer 机制', () => {
+    it('应该合并相邻的 text token', () => {
+      const html = `
+        <article data-testid="tweet">
+          <div data-testid="tweetText">
+            <span>Hello</span>
+            <span> World</span>
+          </div>
+        </article>
+      `;
+      const blocks = new TwitterHtmlToBlocks().convert(html);
+
+      expect(blocks).toHaveLength(1);
+      expect(blocks[0]).toEqual({
+        type: 'paragraph',
+        content: 'Hello World',
+      });
+    });
+
+    it('应该在块级元素前 flush buffer', () => {
+      const html = `
+        <article data-testid="tweet">
+          <div data-testid="tweetText">Text before</div>
+          <img src="https://pbs.twimg.com/media/1.jpg?name=small">
+          <div data-testid="tweetText">Text after</div>
+        </article>
+      `;
+      const blocks = new TwitterHtmlToBlocks().convert(html);
+
+      expect(blocks).toEqual([
+        { type: 'paragraph', content: 'Text before' },
+        { type: 'image', url: 'https://pbs.twimg.com/media/1.jpg?name=orig', alt: '' },
+        { type: 'paragraph', content: 'Text after' },
+      ]);
+    });
+
+    it('应该在 <br> 时 flush buffer', () => {
+      const html = `
+        <article data-testid="tweet">
+          <div data-testid="tweetText">Line 1<br>Line 2</div>
+        </article>
+      `;
+      const blocks = new TwitterHtmlToBlocks().convert(html);
+
+      expect(blocks).toEqual([
+        { type: 'paragraph', content: 'Line 1' },
+        { type: 'paragraph', content: 'Line 2' },
+      ]);
+    });
+  });
+
+  describe('Link 和 Hashtag', () => {
+    it('hashtag 应该存储不带 # 的 tag', () => {
+      const html = `
+        <article data-testid="tweet">
+          <div data-testid="tweetText">
+            <a href="/hashtag/Tech">#Tech</a>
+          </div>
+        </article>
+      `;
+      const blocks = new TwitterHtmlToBlocks().convert(html);
+
+      expect(blocks[0].content).toContain('[#Tech](https://x.com/hashtag/Tech)');
+    });
+
+    it('相对链接应该退化为 text', () => {
+      const html = `
+        <article data-testid="tweet">
+          <div data-testid="tweetText">
+            <a href="/user">@user</a>
+          </div>
+        </article>
+      `;
+      const blocks = new TwitterHtmlToBlocks().convert(html);
+
+      expect(blocks[0].content).toBe('@user');
+      expect(blocks[0].content).not.toContain('[');
+    });
+  });
+
+  describe('多 tweet 处理', () => {
+    it('应该在多个 tweet 之间插入分隔符', () => {
+      const html = `
+        <article data-testid="tweet">
+          <div data-testid="tweetText">First tweet</div>
+        </article>
+        <article data-testid="tweet">
+          <div data-testid="tweetText">Second tweet</div>
+        </article>
+      `;
+      const blocks = new TwitterHtmlToBlocks().convert(html);
+
+      expect(blocks).toEqual([
+        { type: 'paragraph', content: 'First tweet' },
+        { type: 'paragraph', content: '---' },
+        { type: 'paragraph', content: 'Second tweet' },
+      ]);
+    });
+  });
+
+  describe('Skip 逻辑', () => {
+    it('应该跳过 profile_images', () => {
+      const html = `
+        <article data-testid="tweet">
+          <img src="https://pbs.twimg.com/profile_images/avatar.jpg">
+          <img src="https://pbs.twimg.com/media/1.jpg">
+        </article>
+      `;
+      const blocks = new TwitterHtmlToBlocks().convert(html);
+
+      const images = blocks.filter(b => b.type === 'image');
+      expect(images).toHaveLength(1);
+      expect(images[0].url).toContain('1.jpg');
+    });
+
+    it('应该跳过 UserActions', () => {
+      const html = `
+        <article data-testid="tweet">
+          <div data-testid="tweetText">Hello</div>
+          <div data-testid="UserActions">
+            <a href="/like">Like</a>
+          </div>
+        </article>
+      `;
+      const blocks = new TwitterHtmlToBlocks().convert(html);
+
+      expect(blocks).toHaveLength(1);
+      expect(blocks[0].content).toBe('Hello');
+    });
+  });
+
+  describe('引用推文', () => {
+    it('应该正确识别并处理引用推文', () => {
+      const html = `
+        <article data-testid="tweet">
+          <div data-testid="tweetText">Main tweet</div>
+          <blockquote>
+            <article data-testid="tweet">
+              <div data-testid="tweetText">Quoted tweet</div>
+            </article>
+          </blockquote>
+        </article>
+      `;
+      const blocks = new TwitterHtmlToBlocks().convert(html);
+
+      expect(blocks[0].type).toBe('paragraph');
+      expect(blocks[0].content).toBe('Main tweet');
+      expect(blocks[1].type).toBe('quote');
+    });
+  });
+});
+```
 
 ### 集成测试
 
 **文件**: `src/core/extract/adapters/__tests__/twitter.adapter.test.ts`
 
-- HTML 路径成功时图片位置正确
-- HTML 失败时 fallback 到 rawData
-- assets.images 正确提取
+```typescript
+describe('TwitterAdapter - 图片位置', () => {
+  it('HTML 路径应该保持图片在正确位置', async () => {
+    const page = {
+      url: 'https://x.com/user/status/123',
+      html: mockHtmlWithImagesInOrder,
+      rawData: undefined,
+    };
+
+    const result = await adapter.extract(page);
+    const textBlockIndex = result.doc.blocks.findIndex(b => b.type === 'paragraph');
+    const imageBlockIndex = result.doc.blocks.findIndex(b => b.type === 'image');
+
+    expect(imageBlockIndex).toBeGreaterThan(textBlockIndex);
+  });
+
+  it('HTML 失败时应该 fallback 到 rawData', async () => {
+    const page = {
+      url: 'https://x.com/user/status/123',
+      html: '<div>invalid</div>',
+      rawData: JSON.stringify({
+        tweets: [{ id: '123', text: 'Test', author: { screenName: 'user' } }]
+      }),
+    };
+
+    const result = await adapter.extract(page);
+    expect(result.doc.blocks.length).toBeGreaterThan(0);
+    expect(result.warnings).toContain('Used fallback (images at end)');
+  });
+
+  it('应该正确降级 metadata', async () => {
+    const page = {
+      url: 'https://x.com/user/status/123',
+      html: '<article data-testid="tweet"><div>Text</div></article>',
+      rawData: null,
+    };
+
+    const result = await adapter.extract(page);
+    expect(result.doc.author).toBe('@unknown');
+  });
+});
+```
 
 ## 文件清单
 
@@ -273,6 +724,24 @@ export class TwitterAdapter extends BaseAdapter {
 
 - `src/core/extract/adapters/twitter.ts`
 - `src/core/extract/adapters/__tests__/twitter.adapter.test.ts`
+
+## 关键设计决策
+
+### 为什么使用 Buffer Token Array 而不是 String？
+
+- **类型安全**：每个 token 有明确类型，避免 markdown 格式错误
+- **灵活性**：可以在 flush 前修改、合并、重排 tokens
+- **可测试性**：更容易验证中间状态
+
+### 为什么从 article 根开始 DFS 而不是从 tweetText 开始？
+
+- **完整性**：确保不会漏掉作为 tweetText sibling 的媒体元素
+- **正确顺序**：真实反映 DOM 中的元素顺序
+
+### 为什么 <br> 要触发 flush 而不是插入 \n？
+
+- **语义正确**：<br> 表示段落分隔，不是行内换行
+- **避免歧义**：单段多行 vs 多段，flush 行为更明确
 
 ## 后续工作
 
