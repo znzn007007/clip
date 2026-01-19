@@ -13,6 +13,7 @@ import type { DownloadResult, DownloadError } from '../export/assets.js';
 import { generateOutputPaths } from '../export/path.js';
 import { isValidUrl, normalizeUrl } from '../render/utils.js';
 import { createExportResult } from '../errors.js';
+import { DedupeManager } from '../dedupe/index.js';
 
 // Helper function to read from stdin (extracted for testability)
 async function readStdin(): Promise<string> {
@@ -34,17 +35,21 @@ export interface BatchOptions {
   json?: boolean;
   debug?: boolean;
   cdpEndpoint?: string;
+  force?: boolean;
 }
 
 export interface BatchSummary {
   total: number;
   success: number;
   failed: number;
+  skipped: number;
   duration: number;
   failures: Array<{ url: string; error: string }>;
 }
 
 export class BatchRunner {
+  private deduper?: DedupeManager;
+
   async run(options: BatchOptions): Promise<BatchSummary> {
     const urls = await this.parseUrls(options.source, options.filePath);
 
@@ -53,6 +58,7 @@ export class BatchRunner {
         total: 0,
         success: 0,
         failed: 0,
+        skipped: 0,
         duration: 0,
         failures: [],
       };
@@ -61,6 +67,11 @@ export class BatchRunner {
     const startTime = Date.now();
     const failures: Array<{ url: string; error: string }> = [];
     let successCount = 0;
+    let skippedCount = 0;
+
+    // Create shared DedupeManager for all URLs
+    this.deduper = new DedupeManager(options.outputDir);
+    await this.deduper.load();
 
     // Create a single browser manager for all URLs
     const browserManager = new BrowserManager(
@@ -74,7 +85,18 @@ export class BatchRunner {
 
       for (const url of urls) {
         try {
-          const result = await this.processUrl(url, context, options);
+          // Pre-check: Level 1 deduplication (archive lookup)
+          const normalizedUrl = normalizeUrl(url);
+          const checkResult = await this.deduper.checkByUrl(normalizedUrl);
+
+          if (checkResult.isArchived && !options.force) {
+            // Skip this URL as it's already archived
+            skippedCount++;
+            console.log(`⊘ ${url} (skipped: already at ${checkResult.record!.path})`);
+            continue;
+          }
+
+          const result = await this.processUrl(url, context, options, checkResult);
           if (options.jsonl) {
             this.printJsonl(result);
           }
@@ -108,6 +130,7 @@ export class BatchRunner {
       total: urls.length,
       success: successCount,
       failed: failures.length,
+      skipped: skippedCount,
       duration,
       failures,
     };
@@ -147,7 +170,8 @@ export class BatchRunner {
   private async processUrl(
     url: string,
     context: any,
-    options: BatchOptions
+    options: BatchOptions,
+    checkResult: Awaited<ReturnType<DedupeManager['checkByUrl']>>
   ): Promise<ExportResult> {
     // Validate URL
     if (!isValidUrl(url)) {
@@ -166,6 +190,22 @@ export class BatchRunner {
       // Extract
       const adapter = registry.select(normalizedUrl);
       const { doc } = await adapter.extract(page);
+
+      // Level 2 deduplication check after extraction
+      if (this.deduper && !options.force) {
+        const duplicateCheck = await this.deduper.checkByDoc(doc);
+        if (duplicateCheck.isArchived) {
+          throw new ClipError(
+            ErrorCode.ALREADY_ARCHIVED,
+            `Duplicate content: ${normalizedUrl} already archived at ${duplicateCheck.record!.path}`
+          );
+        }
+      }
+
+      // Force mode: remove old archive record if exists
+      if (checkResult.isArchived && options.force && this.deduper) {
+        await this.deduper.removeRecord(normalizedUrl);
+      }
 
       // Export
       const markdownGen = new MarkdownGenerator();
@@ -190,6 +230,12 @@ export class BatchRunner {
       // Generate markdown (pass failures)
       await markdownGen.generate(doc, options.outputDir, assetMapping, assetFailures);
 
+      // Add archive record after successful export
+      if (this.deduper) {
+        const relativePath = markdownPath.replace(options.outputDir, '.').replace(/^\/+/, '');
+        await this.deduper.addRecord(doc, relativePath);
+      }
+
       // Build result
       const stats = {
         wordCount: doc.blocks.length,
@@ -213,7 +259,7 @@ export class BatchRunner {
   private printSummary(summary: BatchSummary): void {
     console.log('\n' + '━'.repeat(50));
     console.log(
-      `Summary: ${summary.success} success, ${summary.failed} failed, ${(summary.duration / 1000).toFixed(1)}s`
+      `Summary: ${summary.success} success, ${summary.skipped} skipped, ${summary.failed} failed, ${(summary.duration / 1000).toFixed(1)}s`
     );
 
     if (summary.failures.length > 0) {

@@ -2,6 +2,7 @@
 import { BatchRunner } from '../runner.js';
 import { BrowserManager } from '../../render/browser.js';
 import { ClipError } from '../../errors.js';
+import { DedupeManager } from '../../dedupe/index.js';
 
 // Mock BrowserManager
 jest.mock('../../render/browser.js');
@@ -11,11 +12,13 @@ jest.mock('../../export/markdown.js');
 jest.mock('../../export/assets.js');
 jest.mock('../../export/path.js');
 jest.mock('../../render/utils.js');
+jest.mock('../../dedupe/index.js');
 
 describe('BatchRunner', () => {
   let runner: BatchRunner;
   let mockBrowserManager: jest.Mocked<BrowserManager>;
   let mockContext: any;
+  let mockDedupeManager: jest.Mocked<DedupeManager>;
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -34,6 +37,17 @@ describe('BatchRunner', () => {
     } as any;
 
     (BrowserManager as jest.MockedClass<typeof BrowserManager>).mockImplementation(() => mockBrowserManager);
+
+    // Setup mock DedupeManager
+    mockDedupeManager = {
+      load: jest.fn().mockResolvedValue(undefined),
+      checkByUrl: jest.fn().mockResolvedValue({ isArchived: false }),
+      checkByDoc: jest.fn().mockResolvedValue({ isArchived: false }),
+      addRecord: jest.fn().mockResolvedValue(undefined),
+      removeRecord: jest.fn().mockResolvedValue(undefined),
+    } as any;
+
+    (DedupeManager as jest.MockedClass<typeof DedupeManager>).mockImplementation(() => mockDedupeManager);
   });
 
   describe('parseUrls', () => {
@@ -130,6 +144,7 @@ describe('BatchRunner', () => {
         total: 0,
         success: 0,
         failed: 0,
+        skipped: 0,
         duration: expect.any(Number),
         failures: [],
       });
@@ -388,7 +403,8 @@ describe('BatchRunner', () => {
           json: true,
           debug: true,
           cdpEndpoint: 'http://localhost:9222',
-        })
+        }),
+        { isArchived: false } // checkResult parameter
       );
 
       consoleLogSpy.mockRestore();
