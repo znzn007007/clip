@@ -52,12 +52,25 @@ clip once "https://x.com/user/status/123" --no-assets
 
 # Debug mode (save screenshots and HTML)
 clip once "https://x.com/user/status/123" --debug
+
+# Deduplication (skip already archived content)
+clip once "https://x.com/user/status/123"  # Skips if already archived
+
+# Force overwrite (re-archive existing content)
+clip once "https://x.com/user/status/123" --force
+
+# Verbose mode (show detailed deduplication info)
+clip once "https://x.com/user/status/123" --verbose
+
+# Batch processing with deduplication
+clip --file urls.txt  # Automatically skips duplicates
 ```
 
 ## Output Structure
 
 ```
 clips/
+├── .archived.json           # Deduplication database
 └── twitter/
     └── 2026/
         └── 0117/
@@ -67,6 +80,11 @@ clips/
                     ├── 001.jpg
                     └── 002.png
 ```
+
+**Deduplication:**
+- The `.archived.json` file tracks all archived URLs to prevent duplicates
+- Stored in the output directory, one file per archive collection
+- Uses canonical URL when available, otherwise normalized source URL
 
 ## Contributing
 
@@ -115,10 +133,18 @@ Create one file per day in `docs/dailyReport/` named `YYYY-MM-DD-summary.md`. Do
 - Twitter adapter (raw + DOM + HTML fallback)
 - Zhihu adapter (HTML parsing)
 - WeChat adapter (HTML parsing)
-- Asset downloading (needs implementation)
+- Asset downloading ✅
+- Batch processing ✅
+- Deduplication system ✅
+
+**M2 - Enhancement Features (In Progress)**
+- Image position fixing for Twitter
+- Browser strategy refactoring
+- Config file support
 
 ## TODO
 
-- [ ] Implement actual image downloading
-- [ ] Queue/batch processing
-- [ ] Config file support
+- [ ] Image position fixing (Twitter images appear at end instead of inline)
+- [ ] Browser strategy refactoring (currently Edge-only)
+- [ ] Config file support (~/.clip/config.json)
+- [ ] Queue command implementation

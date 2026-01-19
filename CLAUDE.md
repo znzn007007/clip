@@ -18,6 +18,18 @@ npm test
 npm run build
 node dist/cli/index.js once "https://x.com/user/status/123"
 
+# Batch processing with deduplication
+npm run build
+node dist/cli/index.js --file urls.txt
+
+# Force override (re-archive existing content)
+npm run build
+node dist/cli/index.js once "https://x.com/user/status/123" --force
+
+# Verbose mode (show detailed deduplication info)
+npm run build
+node dist/cli/index.js once "https://x.com/user/status/123" --verbose
+
 # Install Playwright browsers (optional fallback)
 node dist/cli/index.js install-browsers
 ```
@@ -56,19 +68,19 @@ npm test
 
 ## Architecture Overview
 
-The codebase follows a **pipeline architecture** with four main layers:
+The codebase follows a **pipeline architecture** with five main layers:
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                        CLI Layer                             │
-│  (src/cli/) - Commands: once, install-browsers              │
+│  (src/cli/) - Commands: once, batch, install-browsers       │
 └──────────────────────────┬──────────────────────────────────┘
                            │
                            ▼
 ┌─────────────────────────────────────────────────────────────┐
 │                   Orchestrator Layer                         │
 │  (src/core/orchestrator.ts) - ClipOrchestrator              │
-│  Coordinates: browser → render → extract → export            │
+│  Coordinates: dedupe → browser → render → extract → export   │
 └──────────────────────────┬──────────────────────────────────┘
                            │
         ┌──────────────────┴──────────────────┐
@@ -99,13 +111,26 @@ The codebase follows a **pipeline architecture** with four main layers:
                                     │ • AssetDownloader    │
                                     │ • PathGenerator      │
                                     └──────────────────────┘
+                                               │
+                                               ▼
+                                    ┌──────────────────────┐
+                                    │   Dedupe Layer       │
+                                    │ (src/core/dedupe/)   │
+                                    │                      │
+                                    │ • DedupeManager      │
+                                    │ • Strategy functions │
+                                    │ • Archive database   │
+                                    └──────────────────────┘
 ```
 
 ## Key Data Flow
 
-1. **URL → RenderedPage**: `PageRenderer` uses Playwright to load page, waits for content, extracts raw data and HTML
-2. **RenderedPage → ClipDoc**: `Adapter` (Twitter/Zhihu/WeChat) parses content into structured blocks
-3. **ClipDoc → Markdown/JSON**: Exporters generate final output files
+1. **URL → Dedupe Check (Level 1)**: `DedupeManager` checks if URL already archived (before browser launch)
+2. **URL → RenderedPage**: `PageRenderer` uses Playwright to load page, waits for content, extracts raw data and HTML
+3. **RenderedPage → ClipDoc**: `Adapter` (Twitter/Zhihu/WeChat) parses content into structured blocks
+4. **ClipDoc → Dedupe Check (Level 2)**: `DedupeManager` checks by canonical URL (after extraction)
+5. **ClipDoc → Markdown/JSON**: Exporters generate final output files
+6. **Success → Archive Record**: `DedupeManager` adds record to `.archived.json`
 
 ## Critical Implementation Details
 
@@ -134,6 +159,37 @@ Currently hardcoded to `channel: 'msedge'` in `BrowserManager`. For open-source 
 2. System browsers (Chrome/Edge) as fallback
 3. `--browser` CLI option
 
+### Deduplication Strategy
+
+The deduplication system uses **two-level checking** to efficiently avoid re-archiving content:
+
+**Level 1 Check** (pre-render):
+- Uses normalized URL (hash removed)
+- Fast check that avoids expensive browser operations
+- Performed in `ClipOrchestrator.archive()` before launching browser
+
+**Level 2 Check** (post-extraction):
+- Uses `canonicalUrl` when available (more accurate)
+- Catches duplicates with different URLs pointing to same content
+- Performed after adapter extracts the document
+
+**Dedupe Key Priority:**
+```typescript
+// In src/core/dedupe/strategy.ts
+getDedupeKey(doc): string {
+  return doc.canonicalUrl || normalizeUrl(doc.sourceUrl);
+}
+```
+
+**Storage Location:**
+- File: `<output-dir>/.archived.json`
+- Format: JSON with versioning support
+- Tracks: firstSeen, lastUpdated, path, platform
+
+**CLI Options:**
+- `--force`: Override existing archive (deletes old record, creates new one)
+- `--verbose`: Show detailed deduplication information during processing
+
 ### Adapter Pattern
 
 All adapters extend `BaseAdapter`:
@@ -158,8 +214,9 @@ Core types in `src/core/types/index.ts`:
 
 1. ~~Asset downloading not implemented~~ - ✅ Completed (2026-01-18)
 2. **Zhihu parseFromRawState** is stub (returns null)
-3. **CDP connection** option exists but not implemented in `BrowserManager`
+3. **CDP connection** option exists but not fully implemented in `BrowserManager`
 4. **Browser hardcoding** - only works with Edge currently
+5. **Image position** - Twitter images appear at end of document instead of inline (2026-01-19)
 
 ## Platform-Specific Notes
 
