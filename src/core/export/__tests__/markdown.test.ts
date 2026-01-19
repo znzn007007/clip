@@ -78,6 +78,33 @@ describe('MarkdownGenerator', () => {
         'utf-8'
       );
     });
+
+    it('should append asset failure notice when provided', async () => {
+      const { generateOutputPaths, buildFrontMatter } = await import('../path.js');
+      const mockDoc = createMockDoc([
+        { type: 'paragraph', content: 'Test paragraph' },
+      ]);
+
+      (generateOutputPaths as jest.Mock).mockResolvedValue({
+        markdownPath: '/test/output.md',
+        assetsDir: '/test/assets',
+      });
+      (buildFrontMatter as jest.Mock).mockReturnValue('---\nfrontmatter\n---\n\n');
+      (fs.writeFile as jest.Mock).mockResolvedValue(undefined);
+
+      await generator.generate(
+        mockDoc,
+        mockOutputDir,
+        new Map(),
+        [{ url: 'https://example.com/a.jpg', filename: '001.jpg', reason: '网络超时', attempts: 3 }]
+      );
+
+      expect(fs.writeFile).toHaveBeenCalledWith(
+        '/test/output.md',
+        expect.stringContaining('图片下载提示'),
+        'utf-8'
+      );
+    });
   });
 
   describe('blockToMarkdown', () => {
@@ -178,6 +205,16 @@ describe('MarkdownGenerator', () => {
       expect(result).toBe('[Example Site](https://example.com)');
     });
 
+    it('should convert hashtag block', () => {
+      const hashtag: Block = {
+        type: 'hashtag',
+        tag: '#test',
+        url: 'https://x.com/hashtag/test',
+      } as any;
+      const result = (generator as any).blockToMarkdown(hashtag, new Map());
+      expect(result).toBe('[#test](https://x.com/hashtag/test)');
+    });
+
     it('should convert video block with thumbnail', () => {
       const video: Block = {
         type: 'video',
@@ -203,6 +240,32 @@ describe('MarkdownGenerator', () => {
     it('should handle unknown block type', () => {
       const unknown = { type: 'unknown', content: 'test' } as any;
       const result = (generator as any).blockToMarkdown(unknown, new Map());
+      expect(result).toBe('');
+    });
+
+    it('should format tweet meta when values exist', () => {
+      const meta: Block = {
+        type: 'tweet_meta',
+        likes: 10,
+        retweets: 2,
+        replies: 1,
+        views: 100,
+      } as any;
+      const result = (generator as any).blockToMarkdown(meta, new Map());
+      expect(result).toContain('互动数据');
+      expect(result).toContain('❤️ 10');
+      expect(result).toContain('🔁 2');
+    });
+
+    it('should return empty for tweet meta with zeros', () => {
+      const meta: Block = {
+        type: 'tweet_meta',
+        likes: 0,
+        retweets: 0,
+        replies: 0,
+        views: 0,
+      } as any;
+      const result = (generator as any).blockToMarkdown(meta, new Map());
       expect(result).toBe('');
     });
   });

@@ -1,4 +1,5 @@
 // src/core/extract/adapters/__tests__/twitter.adapter.test.ts
+import { jest } from '@jest/globals';
 import { TwitterAdapter } from '../twitter.js';
 import type { RenderedPage } from '../../../render/types.js';
 import type { Platform } from '../../../types/index.js';
@@ -221,6 +222,91 @@ describe('TwitterAdapter', () => {
 
       expect(result.doc.author).toBe('@testuser');
       expect(result.doc.blocks.length).toBeGreaterThan(0);
+    });
+
+    it('falls back to HTML when raw data contains no tweets', async () => {
+      const page: RenderedPage = {
+        url: 'https://x.com/testuser/status/123456789',
+        canonicalUrl: 'https://x.com/testuser/status/123456789',
+        title: 'Post by @testuser',
+        html: mockTweetHtml,
+        platform: 'twitter' as Platform,
+        rawData: JSON.stringify({ tweets: [] }),
+      };
+
+      const result = await adapter.extract(page);
+
+      expect(result.warnings).toContain('Used HTML fallback parsing');
+      expect(result.doc.author).toBe('@testuser');
+    });
+
+    it('uses DOM extraction when available', async () => {
+      const page: RenderedPage = {
+        url: 'https://x.com/testuser/status/123456789',
+        canonicalUrl: 'https://x.com/testuser/status/123456789',
+        title: 'Post by @testuser',
+        html: mockTweetHtml,
+        platform: 'twitter' as Platform,
+        page: {} as any,
+      };
+
+      const tweet = {
+        id: '1',
+        text: 'dom tweet',
+        author: { screenName: 'testuser', displayName: 'Test User' },
+        createdAt: '2026-01-01T00:00:00Z',
+        metrics: { likes: 0, retweets: 0, replies: 0, views: 0 },
+        media: [],
+        hashtags: [],
+        urls: [],
+      };
+
+      (adapter as any).domExtractor = {
+        extract: jest.fn(() => Promise.resolve({})),
+      };
+      (adapter as any).parser = {
+        parseFromRawState: jest.fn(() => [tweet]),
+      };
+
+      const result = await adapter.extract(page);
+
+      expect(result.warnings).toContain('Used DOM extraction');
+      expect(result.doc.author).toBe('@testuser');
+    });
+
+    it('continues when DOM extraction fails', async () => {
+      const page: RenderedPage = {
+        url: 'https://x.com/testuser/status/123456789',
+        canonicalUrl: 'https://x.com/testuser/status/123456789',
+        title: 'Post by @testuser',
+        html: mockTweetHtml,
+        platform: 'twitter' as Platform,
+        page: {} as any,
+      };
+
+      (adapter as any).domExtractor = {
+        extract: jest.fn(() => Promise.reject(new Error('dom fail'))),
+      };
+
+      const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => undefined);
+      const result = await adapter.extract(page);
+      errorSpy.mockRestore();
+
+      expect(result.doc.author).toBe('@testuser');
+    });
+
+    it('throws PARSE_FAILED when HTML parsing fails', async () => {
+      const page: RenderedPage = {
+        url: 'https://x.com/testuser/status/123456789',
+        canonicalUrl: 'https://x.com/testuser/status/123456789',
+        title: 'Post by @testuser',
+        html: '<html><body>No tweets here</body></html>',
+        platform: 'twitter' as Platform,
+      };
+
+      await expect(adapter.extract(page)).rejects.toMatchObject({
+        code: 'PARSE_FAILED',
+      });
     });
   });
 });

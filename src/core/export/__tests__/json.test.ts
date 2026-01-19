@@ -114,6 +114,19 @@ describe('export/json', () => {
       expect(result.stats?.imageCount).toBe(5);
     });
 
+    it('should include asset failures when provided', () => {
+      const doc = createMockDoc();
+      const paths = createMockPaths();
+      const stats = createMockStats();
+      const failures = [
+        { url: 'https://example.com/a.jpg', filename: '001.jpg', reason: '网络超时', attempts: 3 },
+      ];
+
+      const result = buildExportResult(doc, paths, stats, failures);
+
+      expect(result.diagnostics?.assetFailures).toEqual(failures);
+    });
+
     it('should set status to success', () => {
       const doc = createMockDoc();
       const paths = createMockPaths();
