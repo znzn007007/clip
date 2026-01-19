@@ -236,7 +236,8 @@ describe('TwitterAdapter', () => {
 
       const result = await adapter.extract(page);
 
-      expect(result.warnings).toContain('Used HTML fallback parsing');
+      // HTML parsing is now the primary path, so no warning needed
+      expect(result.warnings.length).toBe(0);
       expect(result.doc.author).toBe('@testuser');
     });
 
@@ -270,7 +271,8 @@ describe('TwitterAdapter', () => {
 
       const result = await adapter.extract(page);
 
-      expect(result.warnings).toContain('Used DOM extraction');
+      // DOM extraction is now only used for metadata, not blocks
+      // HTML parsing is the primary path for blocks
       expect(result.doc.author).toBe('@testuser');
     });
 

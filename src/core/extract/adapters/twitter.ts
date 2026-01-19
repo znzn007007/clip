@@ -2,12 +2,18 @@
 import { BaseAdapter } from './base.js';
 import type { ExtractResult } from '../types.js';
 import type { RenderedPage } from '../../render/types.js';
-import type { ClipDoc, Block } from '../../types/index.js';
+import type { ClipDoc, Block, AssetImage } from '../../types/index.js';
 import { TwitterParser, type TweetData } from './twitter/parser.js';
 import { TwitterBlockBuilder } from './twitter/block-builder.js';
 import { TwitterExtractError } from './twitter/errors.js';
 import { TwitterDomExtractor } from './twitter/dom-extractor.js';
 import * as cheerio from 'cheerio';
+
+interface TweetMetadata {
+  author: string;
+  publishedAt?: string;
+  tweetData: TweetData | null;
+}
 
 export class TwitterAdapter extends BaseAdapter {
   readonly platform = 'twitter';
@@ -20,160 +26,152 @@ export class TwitterAdapter extends BaseAdapter {
   async extract(page: RenderedPage): Promise<ExtractResult> {
     const warnings: string[] = [];
 
-    // Primary path: parse from raw data (if available)
-    const rawData = page.rawData;
-    if (rawData) {
+    // Step 1: Extract metadata first (async)
+    const metadata = await this.extractMetadata(page, warnings);
+
+    // Step 2: Generate blocks from HTML (primary path, correct positions)
+    if (page.html) {
       try {
-        return this.extractFromRawData(page, rawData);
+        const { TwitterHtmlToBlocks } = await import('./twitter/html-to-blocks.js');
+        const htmlToBlocks = new TwitterHtmlToBlocks();
+        const blocks = htmlToBlocks.convert(page.html);
+
+        if (blocks.length > 0) {
+          return {
+            doc: {
+              platform: 'twitter',
+              sourceUrl: page.url,
+              canonicalUrl: page.canonicalUrl,
+              title: this.generateTitle(blocks, metadata.tweetData),
+              author: metadata.author,
+              publishedAt: metadata.publishedAt,
+              fetchedAt: new Date().toISOString(),
+              blocks,
+              assets: this.extractAssets(blocks),
+            },
+            warnings,
+          };
+        }
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        warnings.push(`Raw data parsing failed: ${message}`);
+        warnings.push(`HTML parsing failed: ${message}`);
       }
     }
 
-    // Fallback path: parse from HTML
-    try {
-      return await this.extractFromHtml(page);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      warnings.push(`HTML parsing failed: ${message}`);
-      throw new TwitterExtractError(
-        'All parsing methods failed',
-        'PARSE_FAILED',
-        error as Error
-      );
-    }
-  }
-
-  private extractFromRawData(page: RenderedPage, rawData: string): ExtractResult {
-    const parsedData = JSON.parse(rawData);
-    const tweets = this.parser.parseFromRawState(parsedData);
-
-    if (tweets.length === 0) {
-      throw new TwitterExtractError(
-        'No tweets found in page data',
-        'NO_TWEETS'
-      );
+    // Step 3: Fallback to rawData → BlockBuilder (images at end)
+    if (metadata.tweetData) {
+      const blocks = this.blockBuilder.tweetToBlocks(metadata.tweetData);
+      return {
+        doc: {
+          platform: 'twitter',
+          sourceUrl: page.url,
+          canonicalUrl: page.canonicalUrl,
+          title: this.generateTitle(blocks, metadata.tweetData),
+          author: metadata.author,
+          publishedAt: metadata.publishedAt,
+          fetchedAt: new Date().toISOString(),
+          blocks,
+          assets: this.extractAssets(blocks),
+        },
+        warnings: [...warnings, 'Used fallback (images at end)'],
+      };
     }
 
-    return {
-      doc: this.buildDocFromTweets(tweets, page),
-      warnings: [],
-    };
+    // Step 4: Complete failure
+    throw new TwitterExtractError('All extraction methods failed', 'PARSE_FAILED');
   }
 
-  private async extractFromHtml(page: RenderedPage): Promise<ExtractResult> {
-    // Prefer DOM extraction if page is available
+  private async extractMetadata(
+    page: RenderedPage,
+    warnings: string[]
+  ): Promise<TweetMetadata> {
+    // Try rawData first
+    if (page.rawData) {
+      try {
+        const parsed = JSON.parse(page.rawData);
+        const tweets = this.parser.parseFromRawState(parsed);
+        if (tweets.length > 0) {
+          return {
+            author: `@${tweets[0].author.screenName}`,
+            publishedAt: tweets[0].createdAt,
+            tweetData: tweets[0],
+          };
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        warnings.push(`rawData parsing failed: ${message}`);
+      }
+    }
+
+    // Try DOM extraction
     if (page.page) {
       try {
         const rawData = await this.domExtractor.extract(page.page);
         const tweets = this.parser.parseFromRawState(rawData);
-
         if (tweets.length > 0) {
           return {
-            doc: this.buildDocFromTweets(tweets, page),
-            warnings: ['Used DOM extraction'],
+            author: `@${tweets[0].author.screenName}`,
+            publishedAt: tweets[0].createdAt,
+            tweetData: tweets[0],
           };
         }
       } catch (error) {
-        console.error('[DEBUG] DOM extraction failed:', error);
+        const message = error instanceof Error ? error.message : String(error);
+        warnings.push(`DOM extraction failed: ${message}`);
       }
     }
 
-    // Fallback to cheerio HTML parsing
-    const $ = cheerio.load(page.html);
-    const tweets: TweetData[] = [];
+    // Fallback to HTML parsing for metadata only
+    if (page.html) {
+      try {
+        const $ = cheerio.load(page.html);
+        const href = $('[data-testid="User-Name"] a[href^="/"]').first().attr('href');
+        const handle = href ? `@${href.slice(1)}` : '@unknown';
 
-    // Check what elements exist in HTML
-    const articleCount = $('article').length;
-    const dataTestIdCount = $('[data-testid]').length;
+        const $time = $('time').first();
+        const datetime = $time.attr('datetime');
 
-    // List all data-testid values found
-    const testIds: string[] = [];
-    $('[data-testid]').each((_, el) => {
-      const id = $(el).attr('data-testid');
-      if (id && !testIds.includes(id)) {
-        testIds.push(id);
+        return {
+          author: handle,
+          publishedAt: datetime || undefined,
+          tweetData: null,
+        };
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        warnings.push(`HTML metadata extraction failed: ${message}`);
       }
-    });
-
-    const tweetTestIdCount = $('[data-testid="tweet"]').length;
-    const bodyText = $('body').text().slice(0, 500);
-
-    console.error(`[DEBUG] article elements: ${articleCount}`);
-    console.error(`[DEBUG] [data-testid] elements: ${dataTestIdCount}`);
-    console.error(`[DEBUG] data-testid values found: ${testIds.join(', ')}`);
-    console.error(`[DEBUG] [data-testid="tweet"] elements: ${tweetTestIdCount}`);
-    console.error(`[DEBUG] HTML length: ${page.html.length}`);
-    console.error(`[DEBUG] Body text preview: ${bodyText}`);
-
-    // Check for common Twitter patterns
-    const hasSignin = $('body').text().toLowerCase().includes('sign in') || $('body').text().toLowerCase().includes('log in');
-    const hasAuth = $('body').text().toLowerCase().includes('verify') || $('body').text().toLowerCase().includes('authorized') || $('body').text().toLowerCase().includes('suspended');
-    console.error(`[DEBUG] Has sign-in wall: ${hasSignin}, auth required: ${hasAuth}`);
-
-    // Extract all tweets from same author
-    const tweetElements = $('article[data-testid="tweet"]');
-    tweetElements.each((_, el) => {
-      tweets.push(this.parser.parseFromCheerio($, el));
-    });
-
-    if (tweets.length === 0) {
-      throw new TwitterExtractError(
-        'No tweets found in HTML',
-        'NO_TWEETS'
-      );
     }
 
+    // Complete fallback
     return {
-      doc: this.buildDocFromTweets(tweets, page),
-      warnings: ['Used HTML fallback parsing'],
+      author: '@unknown',
+      publishedAt: undefined,
+      tweetData: null,
     };
   }
 
-  private buildDocFromTweets(tweets: TweetData[], page: RenderedPage): ClipDoc {
-    const mainTweet = tweets[0];
-    const blocks: Block[] = [];
+  private generateTitle(blocks: Block[], tweetData: TweetData | null): string {
+    const firstParagraph = blocks.find(b => b.type === 'paragraph');
+    if (firstParagraph) {
+      const text = (firstParagraph as any).content.slice(0, 50);
+      return text.length < (firstParagraph as any).content.length ? text + '...' : text;
+    }
 
-    // Build blocks from all tweets
-    tweets.forEach((tweet, index) => {
-      // Add separator between tweets
-      if (index > 0) {
-        blocks.push({
-          type: 'paragraph',
-          content: '---',
-        });
-      }
-      blocks.push(...this.blockBuilder.tweetToBlocks(tweet));
-    });
+    if (tweetData?.text) {
+      const text = tweetData.text.slice(0, 50);
+      return text.length < tweetData.text.length ? text + '...' : text;
+    }
 
-    // Extract all images from all tweets
-    const allImages = tweets.flatMap(tweet =>
-      tweet.media
-        .filter((m: typeof tweet.media[number]) => m.type === 'image')
-        .map((m: typeof tweet.media[number]) => ({
-          url: m.url,
-          alt: m.alt || '',
-        }))
-    );
-
-    return {
-      platform: 'twitter',
-      sourceUrl: page.url,
-      canonicalUrl: page.canonicalUrl,
-      title: this.generateTitle(mainTweet),
-      author: `@${mainTweet.author.screenName}`,
-      publishedAt: mainTweet.createdAt,
-      fetchedAt: new Date().toISOString(),
-      blocks,
-      assets: {
-        images: allImages,
-      },
-    };
+    return 'Unknown Tweet';
   }
 
-  private generateTitle(tweet: TweetData): string {
-    const text = tweet.text.slice(0, 50);
-    return text.length < tweet.text.length ? text + '...' : text;
+  private extractAssets(blocks: Block[]): { images: AssetImage[] } {
+    const images = blocks
+      .filter(b => b.type === 'image')
+      .map(b => ({
+        url: (b as any).url,
+        alt: (b as any).alt || '',
+      }));
+    return { images };
   }
 }
