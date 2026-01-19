@@ -106,4 +106,112 @@ describe('DedupeManager', () => {
     const result = await manager.checkByUrl('https://x.com/123');
     expect(result.isArchived).toBe(false);
   });
+
+  it('should handle corrupted database file and create backup', async () => {
+    const { existsSync } = require('fs');
+    existsSync.mockReturnValue(true);
+
+    const mockFs = require('fs/promises');
+    mockFs.readFile = jest.fn().mockRejectedValue(new Error('Invalid JSON'));
+    mockFs.rename = jest.fn().mockResolvedValue(undefined);
+
+    const manager = new DedupeManager(testOutputDir);
+    await manager.load();
+
+    const db = manager.getDatabase();
+    expect(db.version).toBe(1);
+    expect(db.archived).toEqual({});
+    expect(mockFs.rename).toHaveBeenCalled();
+  });
+
+  it('should handle backup failure gracefully', async () => {
+    const { existsSync } = require('fs');
+    existsSync.mockReturnValue(true);
+
+    const mockFs = require('fs/promises');
+    mockFs.readFile = jest.fn().mockRejectedValue(new Error('Invalid JSON'));
+    mockFs.rename = jest.fn().mockRejectedValue(new Error('Rename failed'));
+
+    const manager = new DedupeManager(testOutputDir);
+    await manager.load();
+
+    const db = manager.getDatabase();
+    expect(db.version).toBe(1);
+    expect(db.archived).toEqual({});
+  });
+
+  it('should not reload if already loaded', async () => {
+    const { existsSync } = require('fs');
+    existsSync.mockReturnValue(false);
+
+    const manager = new DedupeManager(testOutputDir);
+    await manager.load();
+
+    // Second load should be a no-op
+    await manager.load();
+
+    // Should still have empty database
+    const db = manager.getDatabase();
+    expect(db.archived).toEqual({});
+  });
+
+  it('should check unarchived URL', async () => {
+    const manager = new DedupeManager(testOutputDir);
+    await manager.load();
+
+    const result = await manager.checkByUrl('https://x.com/not-archived');
+    expect(result.isArchived).toBe(false);
+    expect(result.record).toBeUndefined();
+  });
+
+  it('should check unarchived document', async () => {
+    const manager = new DedupeManager(testOutputDir);
+    await manager.load();
+
+    const doc: ClipDoc = {
+      platform: 'twitter',
+      sourceUrl: 'https://x.com/not-archived',
+      canonicalUrl: 'https://x.com/not-archived',
+      title: 'Test',
+      fetchedAt: '2026-01-19T00:00:00Z',
+      blocks: [],
+      assets: { images: [] },
+    };
+
+    const result = await manager.checkByDoc(doc);
+    expect(result.isArchived).toBe(false);
+    expect(result.record).toBeUndefined();
+  });
+
+  it('should ensure loaded before operations', async () => {
+    const { existsSync } = require('fs');
+    existsSync.mockReturnValue(false);
+
+    const manager = new DedupeManager(testOutputDir);
+
+    // Directly call checkByUrl without explicit load
+    const result = await manager.checkByUrl('https://x.com/test');
+    expect(result.isArchived).toBe(false);
+  });
+
+  it('should use canonical URL for dedupe key when available', async () => {
+    const manager = new DedupeManager(testOutputDir);
+    await manager.load();
+
+    const doc: ClipDoc = {
+      platform: 'twitter',
+      sourceUrl: 'https://x.com/123?hash=removed',
+      canonicalUrl: 'https://x.com/123',
+      title: 'Test',
+      fetchedAt: '2026-01-19T00:00:00Z',
+      blocks: [],
+      assets: { images: [] },
+    };
+
+    await manager.addRecord(doc, './twitter/2026/01/19/abc/');
+
+    // Check with different URL but same canonical
+    const result = await manager.checkByUrl('https://x.com/123?different=param');
+    expect(result.isArchived).toBe(true);
+  });
 });
