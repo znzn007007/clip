@@ -17,6 +17,8 @@ export function registerArchiveCommand(program: Command): void {
     .option('--cdp <endpoint>', 'Connect to existing browser via CDP')
     .option('--file <path>', 'Read URLs from file')
     .option('--stdin', 'Read URLs from stdin')
+    .option('--force', 'Force overwrite existing archives', false)
+    .option('--verbose', 'Verbose output', false)
     .action(async (url: string | undefined, options) => {
       // Validate arguments
       const hasUrl = url && url.length > 0;
@@ -52,10 +54,18 @@ async function handleSingleUrl(url: string, options: any): Promise<void> {
       downloadAssets: options.assets,
       json: options.json,
       debug: options.debug,
+      force: options.force,
+      verbose: options.verbose,
     });
 
     if (options.json) {
       console.log(JSON.stringify(result, null, 2));
+    }
+
+    // Check for "already archived" warning
+    if (result.diagnostics?.warnings?.some(w => w.includes('Already archived'))) {
+      console.log('⊘ Already archived:', result.diagnostics.warnings.find(w => w.includes('Already archived')));
+      return;
     }
 
     if (result.status === 'success') {
@@ -86,6 +96,7 @@ async function handleBatch(options: any): Promise<void> {
       format: options.format,
       downloadAssets: options.assets,
       cdpEndpoint: options.cdp,
+      force: options.force ?? false,
     });
   } catch (error) {
     console.error('Error:', error instanceof Error ? error.message : error);
