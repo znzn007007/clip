@@ -1,0 +1,43 @@
+# 源文件
+src/
+*.ts
+tsconfig.json
+
+# 测试
+**/__tests__/
+**/*.test.ts
+coverage/
+jest.config.js
+
+# 开发文件
+.eslintrc.js
+.prettierrc.js
+.editorconfig
+
+# 文档（除 README）
+docs/
+*.md
+!README.md
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# 其他
+.git/
+.gitignore
+.env
+.env.*
+.DS_Store
+.claude/
+.clip/
+.worktrees/
+clips/
+debug/
