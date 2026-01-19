@@ -31,9 +31,9 @@ describe('TwitterHtmlToBlocks', () => {
       const blocks = new TwitterHtmlToBlocks().convert(html);
 
       expect(blocks[0].type).toBe('paragraph');
-      expect(blocks[0].content).toBe('Text before');
+      expect((blocks[0] as any).content).toBe('Text before');
       expect(blocks[1].type).toBe('image');
-      expect(blocks[1].url).toBe('https://pbs.twimg.com/media/1.jpg?name=orig');
+      expect((blocks[1] as any).url).toBe('https://pbs.twimg.com/media/1.jpg?name=orig');
     });
 
     it('应该在 <br> 时 flush buffer', () => {
@@ -62,7 +62,7 @@ describe('TwitterHtmlToBlocks', () => {
       `;
       const blocks = new TwitterHtmlToBlocks().convert(html);
 
-      expect(blocks[0].content).toContain('[#Tech](https://x.com/hashtag/Tech)');
+      expect((blocks[0] as any).content).toContain('[#Tech](https://x.com/hashtag/Tech)');
     });
 
     it('相对链接应该退化为 text', () => {
@@ -75,8 +75,8 @@ describe('TwitterHtmlToBlocks', () => {
       `;
       const blocks = new TwitterHtmlToBlocks().convert(html);
 
-      expect(blocks[0].content).toBe('@user');
-      expect(blocks[0].content).not.toContain('[');
+      expect((blocks[0] as any).content).toBe('@user');
+      expect((blocks[0] as any).content).not.toContain('[');
     });
   });
 
@@ -112,7 +112,7 @@ describe('TwitterHtmlToBlocks', () => {
 
       const images = blocks.filter((b: any) => b.type === 'image');
       expect(images).toHaveLength(1);
-      expect(images[0].url).toContain('1.jpg');
+      expect((images[0] as any).url).toContain('1.jpg');
     });
 
     it('应该跳过 UserActions', () => {
@@ -127,7 +127,7 @@ describe('TwitterHtmlToBlocks', () => {
       const blocks = new TwitterHtmlToBlocks().convert(html);
 
       expect(blocks).toHaveLength(1);
-      expect(blocks[0].content).toBe('Hello');
+      expect((blocks[0] as any).content).toBe('Hello');
     });
   });
 });
