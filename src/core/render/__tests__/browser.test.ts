@@ -175,4 +175,144 @@ describe('BrowserManager', () => {
     expect(context.close).toHaveBeenCalledTimes(1);
     expect(manager.getContext()).toBeUndefined();
   });
+
+  it('should not check twitter login for non-twitter URLs', async () => {
+    const context = {
+      cookies: mockResolved([]),
+      close: mockResolved(undefined),
+      pages: jest.fn().mockReturnValue([]),
+    };
+
+    launchMock.mockImplementation(() => Promise.resolve(context));
+
+    const manager = new BrowserManager('C:/tmp/session');
+    await manager.launch('https://zhihu.com/question/123');
+
+    expect(context.cookies).not.toHaveBeenCalled();
+    expect(context.pages).not.toHaveBeenCalled();
+  });
+
+  it('should handle launch error and throw ClipError', async () => {
+    mkdirMock.mockImplementation(() => Promise.resolve());
+    launchMock.mockImplementation(() => Promise.reject(new Error('Browser launch failed')));
+
+    const manager = new BrowserManager('C:/tmp/session');
+    await expect(manager.launch('https://example.com')).rejects.toBeInstanceOf(ClipError);
+    await expect(manager.launch('https://example.com')).rejects.toMatchObject({
+      code: ErrorCode.NETWORK_ERROR,
+    });
+  });
+
+  it('should handle launch error with unknown error type', async () => {
+    mkdirMock.mockImplementation(() => Promise.resolve());
+    launchMock.mockImplementation(() => Promise.reject('string error'));
+
+    const manager = new BrowserManager('C:/tmp/session');
+    await expect(manager.launch('https://example.com')).rejects.toMatchObject({
+      code: ErrorCode.NETWORK_ERROR,
+    });
+  });
+
+  it('should return undefined for getContext when no context exists', () => {
+    const manager = new BrowserManager('C:/tmp/session');
+    expect(manager.getContext()).toBeUndefined();
+  });
+
+  it('should return context when getContext is called after launch', async () => {
+    const context = {
+      cookies: mockResolved([]),
+      close: mockResolved(undefined),
+    };
+    launchMock.mockImplementation(() => Promise.resolve(context));
+
+    const manager = new BrowserManager('C:/tmp/session');
+    await manager.launch('https://example.com');
+
+    expect(manager.getContext()).toBe(context);
+  });
+
+  it('should use existing page from context when available', async () => {
+    const page = {
+      goto: mockResolved(undefined),
+      waitForTimeout: mockResolved(undefined),
+    };
+
+    const context = {
+      cookies: mockResolved([]),
+      close: mockResolved(undefined),
+      pages: jest.fn().mockReturnValue([page]),
+      newPage: jest.fn(),
+    };
+
+    launchMock.mockImplementation(() => Promise.resolve(context));
+
+    const manager = new BrowserManager('C:/tmp/session');
+    await manager.launch('https://x.com/status/1');
+
+    expect(context.newPage).not.toHaveBeenCalled();
+    expect(page.goto).toHaveBeenCalledWith('https://x.com');
+  });
+
+  it('should check twitter login when no target URL provided', async () => {
+    const context = {
+      cookies: mockResolved([{ name: 'auth_token', domain: 'x.com' }]),
+      close: mockResolved(undefined),
+      pages: jest.fn().mockReturnValue([]),
+    };
+
+    launchMock.mockImplementation(() => Promise.resolve(context));
+
+    const manager = new BrowserManager('C:/tmp/session');
+    await manager.launch();
+
+    expect(context.cookies).toHaveBeenCalled();
+  });
+
+  it('should check twitter login when URL is invalid', async () => {
+    const context = {
+      cookies: mockResolved([{ name: 'auth_token', domain: 'x.com' }]),
+      close: mockResolved(undefined),
+      pages: jest.fn().mockReturnValue([]),
+    };
+
+    launchMock.mockImplementation(() => Promise.resolve(context));
+
+    const manager = new BrowserManager('C:/tmp/session');
+    await manager.launch('not-a-valid-url');
+
+    expect(context.cookies).toHaveBeenCalled();
+  });
+
+  it('should handle cookies for twitter.com domain', async () => {
+    const context = {
+      cookies: mockResolved([{ name: 'auth_token', domain: 'twitter.com' }]),
+      close: mockResolved(undefined),
+      pages: jest.fn().mockReturnValue([]),
+    };
+
+    launchMock.mockImplementation(() => Promise.resolve(context));
+
+    const manager = new BrowserManager('C:/tmp/session');
+    await manager.launch('https://x.com/status/1');
+
+    expect(context.pages).not.toHaveBeenCalled();
+  });
+
+  it('should handle getEdgeCookiesPath returning null for unknown platform', async () => {
+    const originalPlatform = os.platform;
+    jest.spyOn(os, 'platform').mockReturnValue('freebsd' as NodeJS.Platform);
+
+    const context = {
+      close: mockResolved(undefined),
+    };
+
+    launchMock.mockImplementation(() => Promise.resolve(context));
+
+    const manager = new BrowserManager('C:/tmp/session');
+    await manager.launch('https://example.com');
+
+    expect(accessMock).not.toHaveBeenCalled();
+
+    (os.platform as unknown as jest.SpiedFunction<typeof os.platform>).mockRestore();
+  });
 });

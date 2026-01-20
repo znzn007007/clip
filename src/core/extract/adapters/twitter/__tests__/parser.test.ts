@@ -100,4 +100,101 @@ describe('TwitterParser', () => {
     expect(data.media).toEqual([]);
     expect(data.urls).toEqual([]);
   });
+
+  it('filters out tweets without ID from raw state', () => {
+    const parser = new TwitterParser();
+    const result = parser.parseFromRawState({
+      tweets: [
+        { id: '1', text: 'valid', author: { name: 'User', screenName: 'user' } },
+        { text: 'no id', author: { name: 'User2', screenName: 'user2' } },
+        { id: '3', text: 'also valid', author: { name: 'User3', screenName: 'user3' } },
+      ],
+    });
+
+    expect(result).toHaveLength(2);
+    expect(result[0].id).toBe('1');
+    expect(result[1].id).toBe('3');
+  });
+
+  it('handles raw state with missing optional fields', () => {
+    const parser = new TwitterParser();
+    const result = parser.parseFromRawState({
+      tweets: [
+        {
+          id: '1',
+          // text missing
+          author: { name: 'User', screenName: 'user' },
+          // createdAt missing
+          metrics: { likes: 1 },
+          // media missing
+          // hashtags missing
+          // urls missing
+        },
+      ],
+    });
+
+    expect(result).toHaveLength(1);
+    expect(result[0].text).toBe('');
+    expect(result[0].media).toEqual([]);
+    expect(result[0].hashtags).toEqual([]);
+    expect(result[0].urls).toEqual([]);
+  });
+
+  it('handles raw state with quoted tweet containing all fields', () => {
+    const parser = new TwitterParser();
+    const result = parser.parseFromRawState({
+      tweets: [
+        {
+          id: '1',
+          text: 'main',
+          author: { name: 'User', screenName: 'user' },
+          createdAt: '2026-01-01T00:00:00Z',
+          metrics: { likes: 1, retweets: 2, replies: 3, views: 4 },
+          media: [{ type: 'image', url: 'https://example.com/img.jpg' }],
+          hashtags: ['#test'],
+          urls: [{ url: 'https://example.com', displayUrl: 'example.com' }],
+          quotedTweet: {
+            id: '2',
+            text: 'quoted with all fields',
+            author: { name: 'Other', screenName: 'other', avatarUrl: 'https://example.com/avatar.jpg' },
+            createdAt: '2026-01-01T00:00:00Z',
+            metrics: { likes: 5, retweets: 6, replies: 7, views: 8 },
+            media: [{ type: 'video', url: 'https://example.com/video.mp4' }],
+            hashtags: ['#quoted'],
+            urls: [{ url: 'https://quoted.com', displayUrl: 'quoted.com' }],
+          },
+        },
+      ],
+    });
+
+    expect(result).toHaveLength(1);
+    const quoted = result[0].quotedTweet;
+    expect(quoted).toBeDefined();
+    expect(quoted?.id).toBe('2');
+    expect(quoted?.text).toBe('quoted with all fields');
+    expect(quoted?.author.avatarUrl).toBe('https://example.com/avatar.jpg');
+    expect(quoted?.media).toEqual([{ type: 'video', url: 'https://example.com/video.mp4' }]);
+    expect(quoted?.hashtags).toEqual(['#quoted']);
+    expect(quoted?.urls).toEqual([{ url: 'https://quoted.com', displayUrl: 'quoted.com' }]);
+  });
+
+  it('handles tweets without author fields', () => {
+    const parser = new TwitterParser();
+    const result = parser.parseFromRawState({
+      tweets: [
+        {
+          id: '1',
+          text: 'no author',
+          // author missing
+          createdAt: '2026-01-01T00:00:00Z',
+          metrics: { likes: 0, retweets: 0, replies: 0, views: 0 },
+        },
+      ],
+    });
+
+    expect(result).toHaveLength(1);
+    expect(result[0].author.screenName).toBe('');
+    expect(result[0].author.displayName).toBe('');
+    expect(result[0].author.avatarUrl).toBeUndefined();
+  });
 });
