@@ -17,6 +17,7 @@
 5. **页面等待策略优化** - waitUntil: 'load' + 3s 延迟
 6. **CDP 浏览器连接** - `--cdp` 选项支持
 7. **去重逻辑实现** - DedupeManager、两级检查、--force 选项
+8. **图片位置修复** - Twitter 图片内联显示、DOM 顺序解析 (2026-01-20)
 
 ---
 
@@ -24,30 +25,16 @@
 
 ## P1 高优先级
 
-### 1. 图片位置修复 / Image Position Fix
+### 1. ~~图片位置修复 / Image Position Fix~~
 
-**优先级:** 🟡 P1
+**优先级:** 🟡 P1 ✅ **已完成 (2026-01-20)**
 
-**问题描述:**
-当前 Twitter 和可能其他平台的图片全部追加在文章末尾，而不是在原始位置。
+**解决方案:**
+- 重构 `html-to-blocks.ts` 按 DOM 顺序遍历
+- Twitter 图片现在内联显示在正确位置
+- 测试覆盖完整验证 (27 tests passing)
 
-**根本原因:**
-- Twitter adapter 的 `block-builder.ts` 先提取文字，再批量添加图片
-- 图片位置信息在 API 中丢失
-- 需要从原始 HTML 中按 DOM 顺序解析
-
-**实现方案:**
-1. **Phase 1** - 修复 Twitter: 重构 `html-to-blocks.ts` 按 DOM 顺序遍历
-2. **Phase 2** - 添加 blockId: 给 `AssetImage` 添加 `blockId` 和 `position` 字段
-3. **Phase 3** - 验证 Zhihu: 检查知乎图片位置是否正确
-
-**文件:**
-- `src/core/extract/adapters/twitter/html-to-blocks.ts`
-- `src/core/extract/adapters/twitter/block-builder.ts`
-- `src/core/types/index.ts` (AssetImage 接口)
-
-**设计文档:**
-- `docs/plans/2026-01-18-image-position-fix-design.md`
+**参考:** `docs/plans/2026-01-18-image-position-fix-design.md`
 
 ---
 

@@ -216,7 +216,6 @@ Core types in `src/core/types/index.ts`:
 2. **Zhihu parseFromRawState** is stub (returns null)
 3. **CDP connection** option exists but not fully implemented in `BrowserManager`
 4. **Browser hardcoding** - only works with Edge currently
-5. **Image position** - Twitter images appear at end of document instead of inline (2026-01-19)
 
 ## Platform-Specific Notes
 
