@@ -29,5 +29,6 @@ export function isValidUrl(urlString: string): boolean {
 export function normalizeUrl(urlString: string): string {
   const url = new URL(urlString);
   url.hash = '';
+  url.search = '';
   return url.toString();
 }
