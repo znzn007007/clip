@@ -311,4 +311,90 @@ describe('TwitterAdapter', () => {
       });
     });
   });
+
+  describe('TwitterAdapter - 图片位置', () => {
+    it('HTML 路径应该保持图片在正确位置', async () => {
+      const mockHtmlWithImagesInOrder = `
+        <html>
+          <body>
+            <article data-testid="tweet">
+              <div data-testid="User-Name">
+                <a href="/testuser">
+                  <span>Test User</span>
+                </a>
+              </div>
+              <div data-testid="tweetText">Text before image</div>
+              <img src="https://pbs.twimg.com/media/test1.jpg?name=small" alt="First">
+              <div data-testid="tweetText">Text between images</div>
+              <img src="https://pbs.twimg.com/media/test2.jpg?name=small" alt="Second">
+              <time datetime="2025-01-17T10:00:00Z"></time>
+              <div data-testid="reply" aria-label="0 replies"></div>
+              <div data-testid="retweet" aria-label="0 reposts"></div>
+              <div data-testid="like" aria-label="0 likes"></div>
+            </article>
+          </body>
+        </html>
+      `;
+
+      const page: RenderedPage = {
+        url: 'https://x.com/user/status/123',
+        canonicalUrl: 'https://x.com/user/status/123',
+        title: 'Post by @user',
+        html: mockHtmlWithImagesInOrder,
+        platform: 'twitter' as Platform,
+      };
+
+      const result = await adapter.extract(page);
+      const firstImageIndex = result.doc.blocks.findIndex(b => b.type === 'image');
+      const firstParagraphIndex = result.doc.blocks.findIndex(b => b.type === 'paragraph');
+
+      expect(firstImageIndex).toBeGreaterThan(firstParagraphIndex);
+      expect(result.doc.blocks.filter(b => b.type === 'image').length).toBe(2);
+    });
+
+    it('HTML 失败时应该 fallback 到 rawData', async () => {
+      const rawData = JSON.stringify({
+        tweets: [{
+          id: '123',
+          text: 'Test tweet',
+          author: { screenName: 'testuser', name: 'Test User' },
+          createdAt: '2025-01-01T00:00:00Z',
+          metrics: { likes: 0, retweets: 0, replies: 0, views: 0 },
+          media: [],
+          hashtags: [],
+          urls: []
+        }],
+        metadata: {
+          extractedFrom: 'window_state' as const,
+          timestamp: '2025-01-01T00:00:00Z',
+        },
+      });
+
+      const page: RenderedPage = {
+        url: 'https://x.com/user/status/123',
+        canonicalUrl: 'https://x.com/user/status/123',
+        title: 'Post by @user',
+        html: '<div>invalid</div>',
+        platform: 'twitter' as Platform,
+        rawData,
+      };
+
+      const result = await adapter.extract(page);
+      expect(result.doc.blocks.length).toBeGreaterThan(0);
+      expect(result.warnings.some(w => w.includes('Used fallback'))).toBe(true);
+    });
+
+    it('应该正确降级 metadata 到 @unknown', async () => {
+      const page: RenderedPage = {
+        url: 'https://x.com/user/status/123',
+        canonicalUrl: 'https://x.com/user/status/123',
+        title: 'Post by @user',
+        html: '<html><body><article data-testid="tweet"><div data-testid="tweetText">Text</div></article></body></html>',
+        platform: 'twitter' as Platform,
+      };
+
+      const result = await adapter.extract(page);
+      expect(result.doc.author).toBe('@unknown');
+    });
+  });
 });
