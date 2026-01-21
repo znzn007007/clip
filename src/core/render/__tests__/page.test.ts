@@ -59,11 +59,16 @@ describe('PageRenderer', () => {
 
     const evaluate = jest.fn() as jest.Mock;
     evaluate
-      .mockImplementationOnce(() => Promise.resolve(undefined)) // scrollBy
-      .mockImplementationOnce(() => Promise.resolve(1000)) // scrollHeight
-      .mockImplementationOnce(() => Promise.resolve(undefined)) // scrollBy
-      .mockImplementationOnce(() => Promise.resolve(1000)) // scrollHeight (break)
+      .mockImplementationOnce(() => Promise.resolve(undefined)) // expandShowMoreButtons (initial)
+      .mockImplementationOnce(() => Promise.resolve(undefined)) // scroll 1
+      .mockImplementationOnce(() => Promise.resolve(undefined)) // expandShowMoreButtons
+      .mockImplementationOnce(() => Promise.resolve(undefined)) // scroll 2
+      .mockImplementationOnce(() => Promise.resolve(undefined)) // expandShowMoreButtons
       .mockImplementationOnce(() => Promise.resolve(undefined)); // scrollTo top
+
+    const locator = {
+      count: jest.fn().mockImplementation(() => Promise.resolve(0)) as jest.Mock,
+    };
 
     const page = {
       goto: mockResolved(undefined),
@@ -73,6 +78,7 @@ describe('PageRenderer', () => {
       content: mockResolved('<html></html>'),
       $eval: mockResolved('https://x.com/status/1'),
       evaluate,
+      locator: jest.fn(() => locator) as jest.Mock,
     };
 
     const context = { newPage: jest.fn(() => Promise.resolve(page)) } as any;
@@ -91,9 +97,11 @@ describe('PageRenderer', () => {
     });
 
     expect(result.platform).toBe('twitter');
-    expect(result.rawData).toContain('extractedFrom');
+    // Twitter no longer extracts rawData (changed behavior)
+    expect(result.rawData).toBeUndefined();
     expect(result.debugHtmlPath).toBeDefined();
-    expect(result.debugDataPath).toBeDefined();
+    // debugDataPath is only set if rawData exists
+    expect(result.debugDataPath).toBeUndefined();
     expect(mkdirMock).toHaveBeenCalled();
     expect(writeFileMock).toHaveBeenCalled();
     expect(page.goto).toHaveBeenCalledWith('https://x.com/status/1', expect.any(Object));
@@ -125,14 +133,11 @@ describe('PageRenderer', () => {
   it('handles twitter scrolling with evaluate callbacks and missing canonical URL', async () => {
     detectPlatformMock.mockReturnValue('twitter' as any);
 
-    const originalWindow = (globalThis as any).window;
-    const originalDocument = (globalThis as any).document;
-    const scrollBy = jest.fn();
-    const scrollTo = jest.fn();
-    (globalThis as any).window = { scrollBy, scrollTo, innerHeight: 800 };
-    (globalThis as any).document = { body: { scrollHeight: 1000 } };
+    const evaluate = jest.fn().mockImplementation(() => Promise.resolve(undefined)) as jest.Mock;
 
-    const evaluate = jest.fn((fn: () => unknown) => Promise.resolve(fn()));
+    const locator = {
+      count: jest.fn().mockImplementation(() => Promise.resolve(0)) as jest.Mock,
+    };
 
     const page = {
       goto: mockResolved(undefined),
@@ -142,6 +147,7 @@ describe('PageRenderer', () => {
       content: mockResolved('<html></html>'),
       $eval: mockRejected(new Error('no canonical')),
       evaluate,
+      locator: jest.fn(() => locator) as jest.Mock,
     };
 
     const context = { newPage: jest.fn(() => Promise.resolve(page)) } as any;
@@ -153,16 +159,17 @@ describe('PageRenderer', () => {
     const renderer = new PageRenderer(context);
     const result = await renderer.render('https://x.com/status/1', { maxScrolls: 1 });
 
-    (globalThis as any).window = originalWindow;
-    (globalThis as any).document = originalDocument;
-
     expect(result.canonicalUrl).toBeUndefined();
-    expect(scrollBy).toHaveBeenCalled();
-    expect(scrollTo).toHaveBeenCalled();
+    // The new implementation uses page.evaluate directly for scrolling
+    expect(evaluate).toHaveBeenCalled();
   });
 
   it('returns undefined rawData when twitter extractor throws', async () => {
     detectPlatformMock.mockReturnValue('twitter' as any);
+
+    const locator = {
+      count: jest.fn().mockImplementation(() => Promise.resolve(0)) as jest.Mock,
+    };
 
     const page = {
       goto: mockResolved(undefined),
@@ -172,6 +179,7 @@ describe('PageRenderer', () => {
       content: mockResolved('<html></html>'),
       $eval: mockResolved('https://x.com/status/1'),
       evaluate: mockResolved(undefined),
+      locator: jest.fn(() => locator) as jest.Mock,
     };
 
     const context = { newPage: jest.fn(() => Promise.resolve(page)) } as any;
@@ -254,5 +262,104 @@ describe('PageRenderer', () => {
     const failingRenderer = new PageRenderer(failingContext);
     const fallbackResult = await failingRenderer.render('https://zhihu.com/question/1');
     expect(fallbackResult.rawData).toBeUndefined();
+  });
+
+  describe('handleTwitter', () => {
+    it('should stop when reaching maxTweets', async () => {
+      const evaluate = jest.fn() as jest.Mock;
+      const locator = {
+        count: jest.fn() as jest.Mock,
+      };
+      const page = {
+        evaluate,
+        locator: jest.fn(() => locator) as jest.Mock,
+        waitForTimeout: mockResolved(undefined),
+      } as any;
+
+      const context = { newPage: jest.fn(() => Promise.resolve(page)) } as any;
+      const renderer = new PageRenderer(context);
+
+      // Spy on expandShowMoreButtons to avoid actual implementation
+      const expandSpy = jest.spyOn(renderer as any, 'expandShowMoreButtons').mockResolvedValue(undefined);
+
+      // Simulate tweet counts: starts at 5, then increments by 1 each scroll until reaching 7
+      const tweetCounts = [5, 6, 7];
+      let countIndex = 0;
+      locator.count.mockImplementation(() => Promise.resolve(tweetCounts[countIndex++]));
+
+      // maxScrolls=10, maxTweets=7, should stop when reaching 7 tweets
+      await (renderer as any).handleTwitter(page, 10, 7);
+
+      // Should have called count 3 times (5 -> 6 -> 7, then stop)
+      expect(locator.count).toHaveBeenCalledTimes(3);
+      // Should have called evaluate 4 times: 3 scrolls + 1 scroll to top
+      expect(evaluate).toHaveBeenCalledTimes(4);
+
+      expandSpy.mockRestore();
+    });
+
+    it('should stop after 3 unchanged scrolls', async () => {
+      const evaluate = jest.fn() as jest.Mock;
+      const locator = {
+        count: jest.fn() as jest.Mock,
+      };
+      const page = {
+        evaluate,
+        locator: jest.fn(() => locator) as jest.Mock,
+        waitForTimeout: mockResolved(undefined),
+      } as any;
+
+      const context = { newPage: jest.fn(() => Promise.resolve(page)) } as any;
+      const renderer = new PageRenderer(context);
+
+      // Spy on expandShowMoreButtons to avoid actual implementation
+      const expandSpy = jest.spyOn(renderer as any, 'expandShowMoreButtons').mockResolvedValue(undefined);
+
+      // Simulate tweet count staying at 1 (no new tweets loading)
+      locator.count.mockImplementation(() => Promise.resolve(1));
+
+      // maxScrolls=10, maxTweets=100, should stop after 3 unchanged scrolls
+      await (renderer as any).handleTwitter(page, 10, 100);
+
+      // Should have called count 4 times (initial + 3 unchanged checks)
+      expect(locator.count).toHaveBeenCalledTimes(4);
+      // Should have called evaluate 5 times: 4 scrolls (3 unchanged + 1 to check condition) + 1 scroll to top
+      expect(evaluate).toHaveBeenCalledTimes(5);
+
+      expandSpy.mockRestore();
+    });
+
+    it('should reset unchangedCount when new tweets load', async () => {
+      const evaluate = jest.fn() as jest.Mock;
+      const locator = {
+        count: jest.fn() as jest.Mock,
+      };
+      const page = {
+        evaluate,
+        locator: jest.fn(() => locator) as jest.Mock,
+        waitForTimeout: mockResolved(undefined),
+      } as any;
+
+      const context = { newPage: jest.fn(() => Promise.resolve(page)) } as any;
+      const renderer = new PageRenderer(context);
+
+      // Spy on expandShowMoreButtons to avoid actual implementation
+      const expandSpy = jest.spyOn(renderer as any, 'expandShowMoreButtons').mockResolvedValue(undefined);
+
+      // Simulate: 5 -> 5 (unchanged) -> 6 (new) -> 6 (unchanged) -> 6 (unchanged) -> 6 (unchanged, stop)
+      const tweetCounts = [5, 5, 6, 6, 6, 6];
+      let countIndex = 0;
+      locator.count.mockImplementation(() => Promise.resolve(tweetCounts[countIndex++]));
+
+      // maxScrolls=10, maxTweets=100
+      await (renderer as any).handleTwitter(page, 10, 100);
+
+      // Should scroll 5 times before stopping (3 consecutive unchanged at the end)
+      // Evaluate calls: 6 scrolls + 1 scroll to top = 7
+      expect(evaluate).toHaveBeenCalledTimes(7);
+      expect(locator.count).toHaveBeenCalledTimes(6);
+
+      expandSpy.mockRestore();
+    });
   });
 });
