@@ -2,7 +2,7 @@
 import type { BrowserContext, Page } from 'playwright';
 import type { RenderedPage, RenderOptions } from './types.js';
 import { detectPlatform, isValidUrl } from './utils.js';
-import { DEFAULT_TIMEOUT, DEFAULT_MAX_SCROLLS } from '../config/constants.js';
+import { DEFAULT_TIMEOUT, DEFAULT_MAX_SCROLLS, DEFAULT_MAX_TWEETS } from '../config/constants.js';
 import { TwitterRawExtractor } from '../extract/adapters/twitter/raw-extractor.js';
 import { promises as fs } from 'fs';
 import { join } from 'path';
@@ -18,6 +18,7 @@ export class PageRenderer {
 
     const timeout = options.timeout ?? DEFAULT_TIMEOUT;
     const maxScrolls = options.maxScrolls ?? DEFAULT_MAX_SCROLLS;
+    const maxTweets = options.maxTweets ?? DEFAULT_MAX_TWEETS;
 
     const page = await this.context.newPage();
 
@@ -39,15 +40,33 @@ export class PageRenderer {
     // Platform-specific handling
     const platform = detectPlatform(new URL(url));
 
+    // For non-Twitter platforms, extract rawData early
     let rawData: string | undefined;
-    if (platform === 'twitter') {
-      rawData = await this.extractTwitterRawData(page);
-    } else if (platform === 'zhihu') {
+    if (platform === 'zhihu') {
       rawData = await this.extractZhihuRawData(page);
     }
 
     if (platform === 'twitter') {
-      await this.handleTwitter(page, maxScrolls);
+      // Additional wait for Twitter to fully load tweet content
+      await page.waitForTimeout(5000);
+
+      // Check initial state before expanding
+      const beforeExpandCount = await page.locator('article[data-testid="tweet"]').count();
+      console.error(`[DEBUG] Before expand: tweet count=${beforeExpandCount}`);
+
+      // Only expand if we have tweets
+      if (beforeExpandCount > 0) {
+        await this.expandShowMoreButtons(page);
+      }
+
+      // Then scroll to load more tweets
+      await this.handleTwitter(page, maxScrolls, maxTweets);
+
+      // NOTE: Don't extract rawData for Twitter because:
+      // 1. window.__STATE__ contains initial truncated text
+      // 2. Clicking "显示更多" buttons only updates DOM, not window.__STATE__
+      // 3. DOM extraction in TwitterAdapter will get the expanded content
+      // rawData remains undefined so DOM extraction is used instead
     }
 
     // Extract page info
@@ -97,28 +116,85 @@ export class PageRenderer {
     };
   }
 
-  private async handleTwitter(page: Page, maxScrolls: number): Promise<void> {
-    // For Twitter/X, scroll to load thread content
+  private async handleTwitter(page: Page, maxScrolls: number, maxTweets: number): Promise<void> {
+    // 初始展开"显示更多"按钮
+    await this.expandShowMoreButtons(page);
+
     let scrollCount = 0;
-    let previousHeight = 0;
+    let unchangedCount = 0;  // 连续未变化的次数
+    let lastTweetCount = 0;
 
     while (scrollCount < maxScrolls) {
+      // 1. 滚动到底部
       await page.evaluate(() => {
-        window.scrollBy(0, window.innerHeight);
+        window.scrollTo(0, document.body.scrollHeight);
       });
 
-      await page.waitForTimeout(1000);
+      // 2. 等待懒加载
+      await page.waitForTimeout(2000);
 
-      const currentHeight = await page.evaluate(() => document.body.scrollHeight);
-      if (currentHeight === previousHeight) {
-        break; // No more content loading
+      // 3. 展开新加载的推文中的"显示更多"按钮
+      await this.expandShowMoreButtons(page);
+
+      // 4. 检查推文数量
+      const currentTweetCount = await page.locator('article[data-testid="tweet"]').count();
+      console.error(`[DEBUG] Scroll ${scrollCount + 1}: tweet count=${currentTweetCount}`);
+
+      // 5. 检查停止条件
+      if (currentTweetCount >= maxTweets) {
+        console.error(`[DEBUG] Reached maxTweets (${maxTweets}), stopping`);
+        break;
       }
-      previousHeight = currentHeight;
+
+      if (currentTweetCount === lastTweetCount) {
+        unchangedCount++;
+        if (unchangedCount >= 3) {
+          console.error(`[DEBUG] No new tweets after 3 scrolls, stopping`);
+          break;
+        }
+      } else {
+        unchangedCount = 0;  // 重置计数
+      }
+
+      lastTweetCount = currentTweetCount;
       scrollCount++;
     }
 
-    // Scroll back to top
+    console.error(`[DEBUG] Final: ${scrollCount} scrolls, ${lastTweetCount} tweets`);
+
+    // 滚回顶部
     await page.evaluate(() => window.scrollTo(0, 0));
+  }
+
+  private async expandShowMoreButtons(page: Page): Promise<void> {
+    try {
+      // Use the unique data-testid selector for "Show more" buttons
+      const result = await page.evaluate(() => {
+        let clickCount = 0;
+
+        // Find all buttons with data-testid="tweet-text-show-more-link"
+        const buttons = document.querySelectorAll('button[data-testid="tweet-text-show-more-link"]');
+        for (const button of buttons) {
+          try {
+            (button as HTMLElement).click();
+            clickCount++;
+          } catch (e) {
+            console.error('[DEBUG] Failed to click show more button:', e);
+          }
+        }
+
+        return clickCount;
+      });
+
+      console.error(`[DEBUG] Clicked ${result} show more buttons`);
+
+      if (result > 0) {
+        // Wait for expanded content to load
+        await page.waitForTimeout(2000);
+      }
+    } catch (error) {
+      console.error(`[DEBUG] expandShowMoreButtons error:`, error);
+    }
   }
 
   private async extractTwitterRawData(page: Page): Promise<string | undefined> {
