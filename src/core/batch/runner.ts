@@ -248,6 +248,19 @@ export class BatchRunner {
         return createExportResult(error);
       }
 
+      // Capture plain Errors (Playwright timeouts, network errors, etc.)
+      if (error instanceof Error) {
+        const errorCode = error.message.toLowerCase().includes('timeout')
+          ? ErrorCode.TIMEOUT
+          : ErrorCode.NETWORK_ERROR;
+
+        return createExportResult(new ClipError(
+          errorCode,
+          error.message,
+          errorCode === ErrorCode.TIMEOUT
+        ));
+      }
+
       throw error;
     }
   }

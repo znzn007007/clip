@@ -67,6 +67,18 @@ export class TwitterHtmlToBlocks {
 
     switch (tagName) {
       case 'a':
+        // Check if <a> contains block-level content (images, videos)
+        // Twitter long-form articles wrap images in <a> tags
+        if (this.hasBlockLevelContent($node)) {
+          // Flush buffer before handling block content
+          this.flushBuffer(buffer, blocks);
+          // Recurse into children to extract images/videos
+          $node.contents().each((_, child) => {
+            this.dfsTraverse($, child, blocks, buffer);
+          });
+          return;
+        }
+        // Otherwise treat as inline link
         this.handleLinkInline($node, buffer);
         return;
       case 'br':
@@ -113,6 +125,12 @@ export class TwitterHtmlToBlocks {
     if (!href) {
       if (text) buffer.push({ type: 'text', content: text });
       return;
+    }
+
+    // Skip "Show more" and similar links
+    const lowerText = text.toLowerCase();
+    if (lowerText === 'show more' || lowerText === '显示更多') {
+      return; // Skip this link entirely
     }
 
     if (href.startsWith('/hashtag/')) {
@@ -211,6 +229,31 @@ export class TwitterHtmlToBlocks {
     const $node = $(node);
     for (const selector of SKIP_SELECTORS) {
       if ($node.is(selector)) return true;
+    }
+
+    return false;
+  }
+
+  /**
+   * Check if an element contains block-level content like images or videos.
+   * Used to distinguish between inline links and wrapper links.
+   */
+  private hasBlockLevelContent($elem: cheerio.Cheerio<any>): boolean {
+    // Check for direct child images (excluding profile images)
+    if ($elem.find('> img[src*="pbs.twimg.com"]').not('[src*="profile_images"]').length > 0) {
+      return true;
+    }
+    // Check for nested images in div containers (Twitter's structure)
+    if ($elem.find('div img[src*="pbs.twimg.com"]').not('[src*="profile_images"]').length > 0) {
+      return true;
+    }
+    // Check for videos
+    if ($elem.find('> video').length > 0) {
+      return true;
+    }
+    // Check for nested videos
+    if ($elem.find('div video').length > 0) {
+      return true;
     }
     return false;
   }

@@ -396,5 +396,104 @@ describe('TwitterAdapter', () => {
       const result = await adapter.extract(page);
       expect(result.doc.author).toBe('@unknown');
     });
+
+    it('应该提取 <a> 标签内的图片 (长推文/Article)', async () => {
+      const longformHtml = `
+        <html>
+          <body>
+            <article data-testid="tweet">
+              <div data-testid="User-Name">
+                <a href="/testuser"><span>Test User</span></a>
+              </div>
+              <div data-testid="tweetText">Article text before image</div>
+              <a href="/testuser/article/123/me" role="link">
+                <div>
+                  <div data-testid="tweetPhoto">
+                    <img src="https://pbs.twimg.com/media/test1.jpg?format=jpg&name=small" alt="Image 1">
+                  </div>
+                </div>
+              </a>
+              <div data-testid="tweetText">Text between images</div>
+              <a href="/testuser/article/123/me" role="link">
+                <div>
+                  <div data-testid="tweetPhoto">
+                    <img src="https://pbs.twimg.com/media/test2.jpg?format=jpg&name=small" alt="Image 2">
+                  </div>
+                </div>
+              </a>
+              <time datetime="2025-01-17T10:00:00Z"></time>
+              <div data-testid="reply" aria-label="0 replies"></div>
+              <div data-testid="retweet" aria-label="0 reposts"></div>
+              <div data-testid="like" aria-label="10 likes"></div>
+            </article>
+          </body>
+        </html>
+      `;
+
+      const page: RenderedPage = {
+        url: 'https://x.com/testuser/status/123',
+        canonicalUrl: 'https://x.com/testuser/status/123',
+        title: 'Article by @testuser',
+        html: longformHtml,
+        platform: 'twitter' as Platform,
+      };
+
+      const result = await adapter.extract(page);
+
+      // Should extract both images from inside <a> tags
+      const imageBlocks = result.doc.blocks.filter(b => b.type === 'image');
+      expect(imageBlocks.length).toBe(2);
+      expect(imageBlocks[0].url).toContain('pbs.twimg.com/media/test1.jpg');
+      expect(imageBlocks[0].url).toContain('name=orig'); // Should be upgraded to orig quality
+      expect(imageBlocks[1].url).toContain('pbs.twimg.com/media/test2.jpg');
+      expect(imageBlocks[1].url).toContain('name=orig');
+    });
+
+    it('应该区分内联链接和包含图片的链接', async () => {
+      const mixedHtml = `
+        <html>
+          <body>
+            <article data-testid="tweet">
+              <div data-testid="User-Name">
+                <a href="/testuser"><span>Test User</span></a>
+              </div>
+              <div data-testid="tweetText">
+                Check out this <a href="https://example.com">inline link</a>
+              </div>
+              <a href="/testuser/article/123/me">
+                <div data-testid="tweetPhoto">
+                  <img src="https://pbs.twimg.com/media/test.jpg?name=small" alt="Wrapped image">
+                </div>
+              </a>
+              <time datetime="2025-01-17T10:00:00Z"></time>
+              <div data-testid="reply" aria-label="0 replies"></div>
+              <div data-testid="retweet" aria-label="0 reposts"></div>
+              <div data-testid="like" aria-label="10 likes"></div>
+            </article>
+          </body>
+        </html>
+      `;
+
+      const page: RenderedPage = {
+        url: 'https://x.com/testuser/status/123',
+        canonicalUrl: 'https://x.com/testuser/status/123',
+        title: 'Post by @testuser',
+        html: mixedHtml,
+        platform: 'twitter' as Platform,
+      };
+
+      const result = await adapter.extract(page);
+
+      // Should have inline link as markdown
+      const paragraphWithLink = result.doc.blocks.find(b =>
+        b.type === 'paragraph' && (b.content as string).includes('inline link')
+      );
+      expect(paragraphWithLink).toBeDefined();
+
+      // Should also have the wrapped image
+      const imageBlocks = result.doc.blocks.filter(b => b.type === 'image');
+      expect(imageBlocks.length).toBe(1);
+      expect(imageBlocks[0].url).toContain('pbs.twimg.com/media/test.jpg');
+    });
   });
 });

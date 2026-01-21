@@ -13,6 +13,7 @@ interface TweetMetadata {
   author: string;
   publishedAt?: string;
   tweetData: TweetData | null;
+  allTweets?: TweetData[];  // All tweets in thread (for fallback path)
 }
 
 export class TwitterAdapter extends BaseAdapter {
@@ -29,7 +30,35 @@ export class TwitterAdapter extends BaseAdapter {
     // Step 1: Extract metadata first (async)
     const metadata = await this.extractMetadata(page, warnings);
 
-    // Step 2: Generate blocks from HTML (primary path, correct positions)
+    // Step 2: Prefer rawData for threads (multiple tweets), use HTML for single tweets
+    // If we have allTweets from rawData and it's a thread (more than 1 tweet), use rawData
+    if (metadata.allTweets && metadata.allTweets.length > 1) {
+      const blocks = metadata.allTweets.flatMap((tweet, index) => {
+        const tweetBlocks = this.blockBuilder.tweetToBlocks(tweet);
+        // Add separator between tweets
+        if (index > 0) {
+          return [{ type: 'paragraph' as const, content: '---' }, ...tweetBlocks];
+        }
+        return tweetBlocks;
+      });
+
+      return {
+        doc: {
+          platform: 'twitter',
+          sourceUrl: page.url,
+          canonicalUrl: page.canonicalUrl,
+          title: this.generateTitle(blocks, metadata.tweetData),
+          author: metadata.author,
+          publishedAt: metadata.publishedAt,
+          fetchedAt: new Date().toISOString(),
+          blocks,
+          assets: this.extractAssets(blocks),
+        },
+        warnings: [...warnings, 'Used rawData for thread extraction'],
+      };
+    }
+
+    // Step 3: Generate blocks from HTML (for single tweets or when rawData unavailable)
     if (page.html) {
       try {
         const { TwitterHtmlToBlocks } = await import('./twitter/html-to-blocks.js');
@@ -58,9 +87,24 @@ export class TwitterAdapter extends BaseAdapter {
       }
     }
 
-    // Step 3: Fallback to rawData → BlockBuilder (images at end)
+    // Step 4: Final fallback to rawData → BlockBuilder (for single tweet when HTML parsing fails)
     if (metadata.tweetData) {
-      const blocks = this.blockBuilder.tweetToBlocks(metadata.tweetData);
+      let blocks: Block[];
+
+      // Use allTweets if available (thread mode)
+      if (metadata.allTweets && metadata.allTweets.length > 1) {
+        blocks = metadata.allTweets.flatMap((tweet, index) => {
+          const tweetBlocks = this.blockBuilder.tweetToBlocks(tweet);
+          // Add separator between tweets
+          if (index > 0) {
+            return [{ type: 'paragraph' as const, content: '---' }, ...tweetBlocks];
+          }
+          return tweetBlocks;
+        });
+      } else {
+        blocks = this.blockBuilder.tweetToBlocks(metadata.tweetData);
+      }
+
       return {
         doc: {
           platform: 'twitter',
@@ -95,6 +139,7 @@ export class TwitterAdapter extends BaseAdapter {
             author: `@${tweets[0].author.screenName}`,
             publishedAt: tweets[0].createdAt,
             tweetData: tweets[0],
+            allTweets: tweets,  // Return all tweets for thread support
           };
         }
       } catch (error) {
@@ -113,6 +158,7 @@ export class TwitterAdapter extends BaseAdapter {
             author: `@${tweets[0].author.screenName}`,
             publishedAt: tweets[0].createdAt,
             tweetData: tweets[0],
+            allTweets: tweets,  // Return all tweets for thread support
           };
         }
       } catch (error) {

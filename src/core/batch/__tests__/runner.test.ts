@@ -588,7 +588,7 @@ describe('BatchRunner', () => {
       expect(result.diagnostics?.error?.code).toBe(ErrorCode.NETWORK_ERROR);
     });
 
-    it('rethrows non-ClipError exceptions', async () => {
+    it('captures non-ClipError exceptions and returns failed ExportResult', async () => {
       const page = { html: '<html></html>' };
       (PageRenderer as jest.MockedClass<typeof PageRenderer>).mockImplementation(() => ({
         render: jest.fn().mockResolvedValue(page),
@@ -598,9 +598,29 @@ describe('BatchRunner', () => {
         extract: jest.fn().mockRejectedValue(new Error('boom')),
       });
 
-      await expect(
-        runner['processUrl']('https://x.com/status/123', mockContext, options, checkResult)
-      ).rejects.toThrow('boom');
+      const result = await runner['processUrl']('https://x.com/status/123', mockContext, options, checkResult);
+
+      expect(result.status).toBe('failed');
+      expect(result.diagnostics?.error?.code).toBe(ErrorCode.NETWORK_ERROR);
+      expect(result.diagnostics?.error?.message).toBe('boom');
+      expect(result.diagnostics?.error?.retryable).toBe(false);
+    });
+
+    it('captures timeout errors and returns failed ExportResult', async () => {
+      const page = { html: '<html></html>' };
+      (PageRenderer as jest.MockedClass<typeof PageRenderer>).mockImplementation(() => ({
+        render: jest.fn().mockResolvedValue(page),
+      }) as any);
+
+      (registry.select as jest.Mock).mockReturnValue({
+        extract: jest.fn().mockRejectedValue(new Error('Timeout 30000ms exceeded')),
+      });
+
+      const result = await runner['processUrl']('https://x.com/status/123', mockContext, options, checkResult);
+
+      expect(result.status).toBe('failed');
+      expect(result.diagnostics?.error?.code).toBe(ErrorCode.TIMEOUT);
+      expect(result.diagnostics?.error?.retryable).toBe(true);
     });
   });
 });

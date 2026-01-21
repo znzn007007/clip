@@ -129,6 +129,7 @@ describe('ClipOrchestrator', () => {
       downloadAssets: true,
       json: false,
       debug: true,
+      force: true,
     });
 
     expect(mockBrowserManager.launch).toHaveBeenCalledWith('https://x.com/status/1');
@@ -143,11 +144,13 @@ describe('ClipOrchestrator', () => {
 
   it('skips asset downloads when disabled', async () => {
     const orchestrator = new ClipOrchestrator();
+    // Use force to bypass deduplication check
     await orchestrator.archive('https://x.com/status/1', {
       outputDir: './clips',
       format: 'md',
       downloadAssets: false,
       json: false,
+      force: true,
     });
 
     expect(mockAssets.downloadImages).not.toHaveBeenCalled();
@@ -171,6 +174,7 @@ describe('ClipOrchestrator', () => {
       format: 'md',
       downloadAssets: true,
       json: false,
+      force: true,
     });
 
     expect(result.status).toBe('failed');
