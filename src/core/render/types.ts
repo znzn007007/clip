@@ -20,4 +20,5 @@ export interface RenderOptions {
   waitForSelector?: string;
   debug?: boolean;
   maxScrolls?: number;
+  maxTweets?: number;
 }
