@@ -32,6 +32,11 @@ node dist/cli/index.js once "https://x.com/user/status/123" --verbose
 
 # Install Playwright browsers (optional fallback)
 node dist/cli/index.js install-browsers
+
+# Specify browser
+npm run build
+node dist/cli/index.js once "https://x.com/user/status/123" --browser chrome
+node dist/cli/index.js once "https://x.com/user/status/123" --browser edge
 ```
 
 ## Development Guidelines
@@ -152,12 +157,20 @@ Twitter/X uses heavily JS-driven rendering. The adapter tries extraction in prio
 - Waits for `article, main, [role="main"]` selector with 10s timeout
 - Twitter-specific: scrolls to load thread content
 
-### Browser Strategy (TODO: Refactor)
+### Browser Strategy
 
-Currently hardcoded to `channel: 'msedge'` in `BrowserManager`. For open-source compatibility, needs:
-1. Playwright Chromium as default
-2. System browsers (Chrome/Edge) as fallback
-3. `--browser` CLI option
+Supports multiple browsers with auto-detection:
+
+**Browsers supported:**
+- Google Chrome (`--browser chrome`)
+- Microsoft Edge (`--browser edge`)
+- Auto detection (`--browser auto` or default)
+
+**Auto priority:** Edge → Chrome (fallback)
+
+**Session directories:**
+- Chrome: `.clip/session-chrome/`
+- Edge: `.clip/session-edge/`
 
 ### Deduplication Strategy
 
@@ -215,7 +228,6 @@ Core types in `src/core/types/index.ts`:
 1. ~~Asset downloading not implemented~~ - ✅ Completed (2026-01-18)
 2. **Zhihu parseFromRawState** is stub (returns null)
 3. **CDP connection** option exists but not fully implemented in `BrowserManager`
-4. **Browser hardcoding** - only works with Edge currently
 
 ## Platform-Specific Notes
 

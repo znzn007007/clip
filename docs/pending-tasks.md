@@ -38,9 +38,9 @@
 
 ---
 
-### 2. 重构浏览器策略 / Refactor Browser Strategy
+### 2. ~~重构浏览器策略 / Refactor Browser Strategy~~
 
-**优先级:** 高 / High
+**优先级:** 高 / High ✅ **已完成 (2026-01-23)**
 
 **问题描述:**
 当前代码硬编码使用 `channel: 'msedge'`，不利于开源泛用性。需要重构为更灵活的浏览器选择策略。
