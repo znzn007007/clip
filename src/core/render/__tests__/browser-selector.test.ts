@@ -37,14 +37,14 @@ describe('BrowserSelector', () => {
   describe('select() - auto 模式', () => {
     it('edge 可用时应返回 edge', async () => {
       jest.spyOn(selector, 'isAvailable')
-        .mockImplementation(async (b: BrowserType) => b === 'edge');
+        .mockImplementation(async (b: unknown) => (b as BrowserType) === 'edge');
       const result = await selector.select('auto');
       expect(result).toBe('edge');
     });
 
     it('edge 不可用但 chrome 可用时应返回 chrome', async () => {
       jest.spyOn(selector, 'isAvailable')
-        .mockImplementation(async (b: BrowserType) => b === 'chrome');
+        .mockImplementation(async (b: unknown) => (b as BrowserType) === 'chrome');
       const result = await selector.select('auto');
       expect(result).toBe('chrome');
     });
