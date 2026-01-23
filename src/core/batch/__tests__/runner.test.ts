@@ -433,7 +433,6 @@ describe('BatchRunner', () => {
         outputDir: '/custom/output',
         format: 'md+html',
         downloadAssets: true,
-        cdpEndpoint: 'http://localhost:9222',
         json: true,
         debug: true,
       });
@@ -447,7 +446,6 @@ describe('BatchRunner', () => {
           downloadAssets: true,
           json: true,
           debug: true,
-          cdpEndpoint: 'http://localhost:9222',
         }),
         { isArchived: false } // checkResult parameter
       );

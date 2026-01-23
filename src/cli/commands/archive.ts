@@ -22,7 +22,6 @@ export function registerArchiveCommand(program: Command): void {
     .option('--debug', 'Save debug artifacts', false)
     .option('--no-assets', 'Skip asset downloads')
     .option('--continue-on-error', 'Continue on failure (batch mode)')
-    .option('--cdp <endpoint>', 'Connect to existing browser via CDP')
     .option('--file <path>', 'Read URLs from file')
     .option('--stdin', 'Read URLs from stdin')
     .option('--browser <browser>', 'Browser to use (chrome|edge|auto) (default: "auto")', 'auto')
@@ -53,9 +52,7 @@ export function registerArchiveCommand(program: Command): void {
 }
 
 async function handleSingleUrl(url: string, options: any, browserType: BrowserType): Promise<void> {
-  const orchestrator = new ClipOrchestrator(
-    options.cdp ? { cdpEndpoint: options.cdp, browserType } : { browserType }
-  );
+  const orchestrator = new ClipOrchestrator({ browserType });
 
   try {
     console.log(`Archiving: ${url}`);
@@ -107,7 +104,6 @@ async function handleBatch(options: any, browserType: BrowserType): Promise<void
       outputDir: options.out,
       format: options.format,
       downloadAssets: options.assets,
-      cdpEndpoint: options.cdp,
       browserType,
       force: options.force ?? false,
     });

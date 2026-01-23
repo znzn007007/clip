@@ -11,8 +11,7 @@ import { BROWSER_CONFIGS } from '../config/browser-config.js';
 import type { BrowserType, ConfigurableBrowser } from '../types/index.js';
 
 export interface BrowserOptions {
-  cdpEndpoint?: string;  // Chrome DevTools Protocol endpoint (e.g., 'http://localhost:9222')
-  browserType?: BrowserType;  // 新增
+  browserType?: BrowserType;
 }
 
 export class BrowserManager {
