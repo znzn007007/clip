@@ -2,22 +2,29 @@
 import { chromium, type BrowserContext } from 'playwright';
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import * as os from 'os';
 import { DEFAULT_USER_AGENT } from '../config/constants.js';
 import { ClipError } from '../errors.js';
 import { ErrorCode } from '../export/types.js';
 import { detectPlatform } from './utils.js';
+import { BrowserSelector } from './browser-selector.js';
+import { BROWSER_CONFIGS } from '../config/browser-config.js';
+import type { BrowserType, ConfigurableBrowser } from '../types/index.js';
 
 export interface BrowserOptions {
   cdpEndpoint?: string;  // Chrome DevTools Protocol endpoint (e.g., 'http://localhost:9222')
+  browserType?: BrowserType;  // 新增
 }
 
 export class BrowserManager {
   private context?: BrowserContext;
   private sessionDir: string;
   private options?: BrowserOptions;
+  private selectedBrowser?: BrowserType;
 
-  constructor(sessionDir: string = path.join(process.cwd(), '.clip', 'session'), options?: BrowserOptions) {
+  constructor(
+    sessionDir: string = path.join(process.cwd(), '.clip', 'session'),
+    options?: BrowserOptions
+  ) {
     this.sessionDir = sessionDir;
     this.options = options;
   }
@@ -27,38 +34,46 @@ export class BrowserManager {
       return this.context;
     }
 
+    // Step 1: Select browser using BrowserSelector
+    const selector = new BrowserSelector();
+    const resolvedBrowser = await selector.select(this.options?.browserType);
+    this.selectedBrowser = resolvedBrowser;
+    // Type assertion: select() always returns ConfigurableBrowser (never 'auto')
+    const browserConfig = BROWSER_CONFIGS[resolvedBrowser as ConfigurableBrowser];
+
+    // Step 2: Determine session directory
+    const sessionDir = path.join(process.cwd(), browserConfig.sessionDir);
+
     // Ensure session directory exists
     try {
-      await fs.mkdir(this.sessionDir, { recursive: true });
+      await fs.mkdir(sessionDir, { recursive: true });
     } catch (error) {
       throw new ClipError(
         ErrorCode.EXPORT_FAILED,
-        `Failed to create session directory: ${this.sessionDir}`,
+        `Failed to create session directory: ${sessionDir}`,
         false,
-        `Check permissions for directory: ${this.sessionDir}`
+        `Check permissions for directory: ${sessionDir}`
       );
     }
 
-    // Try to copy cookies from Edge's Default profile
-    const edgeCookiesPath = this.getEdgeCookiesPath();
-    if (edgeCookiesPath) {
+    // Step 3: Check for existing cookies from browser
+    const cookiesPath = browserConfig.cookiesPath(process.platform);
+    if (cookiesPath) {
       try {
-        // Check if Edge cookies file exists
-        await fs.access(edgeCookiesPath);
-        console.error(`[INFO] Found Edge cookies at: ${edgeCookiesPath}`);
-        console.error('[INFO] Note: Edge must be closed to use its cookies directly');
+        await fs.access(cookiesPath);
+        console.error(`[INFO] Found ${browserConfig.name} cookies at: ${cookiesPath}`);
+        console.error(`[INFO] Note: ${browserConfig.name} must be closed to use its cookies directly`);
         console.error('[INFO] Alternatively, use a persistent session that will remember logins');
       } catch {
-        console.error('[INFO] Edge cookies not found, starting fresh session');
+        console.error(`[INFO] ${browserConfig.name} cookies not found, starting fresh session`);
       }
     }
 
-    // Launch Edge with persistent session context
-    // This will remember cookies between runs
+    // Step 4: Launch browser with persistent session context
     try {
-      console.error(`[INFO] Launching Edge with persistent session: ${this.sessionDir}`);
-      this.context = await chromium.launchPersistentContext(this.sessionDir, {
-        channel: 'msedge',
+      console.error(`[INFO] Launching ${browserConfig.name} with persistent session: ${sessionDir}`);
+      this.context = await chromium.launchPersistentContext(sessionDir, {
+        channel: browserConfig.channel,
         headless: false,
         userAgent: DEFAULT_USER_AGENT,
         viewport: { width: 1920, height: 1080 },
@@ -69,43 +84,10 @@ export class BrowserManager {
         ],
       });
 
-      const shouldCheckTwitterLogin = this.shouldCheckTwitterLogin(targetUrl);
+      // Step 5: Check for Twitter login if needed
+      const shouldCheckTwitterLogin = this.shouldCheckTwitterLogin(targetUrl, this.selectedBrowser);
       if (shouldCheckTwitterLogin) {
-        // Check if we have Twitter/X cookies
-        const cookies = await this.context.cookies();
-        const hasTwitterCookie = cookies.some(c =>
-          c.domain.includes('x.com') || c.domain.includes('twitter.com')
-        );
-
-        if (!hasTwitterCookie) {
-          console.error('[WARN] No Twitter/X cookies found in session.');
-          console.error('[INFO] Please log in to Twitter/X in the browser window that will open.');
-          console.error('[INFO] The browser will wait for you to navigate to Twitter/X and log in.');
-          console.error('[INFO] After logging in, the extraction will proceed automatically.');
-
-          // Navigate to Twitter to give user a chance to log in
-          const page = this.context.pages()[0] || await this.context.newPage();
-          await page.goto('https://x.com');
-          console.error('[INFO] Waiting for you to log in... (Press Ctrl+C to cancel)');
-
-          // Wait for auth cookie (check every 2 seconds)
-          let loggedIn = false;
-          for (let i = 0; i < 60; i++) { // Wait up to 2 minutes
-            await page.waitForTimeout(2000);
-            const currentCookies = await this.context.cookies();
-            if (currentCookies.some(c => c.name === 'auth_token' && (c.domain.includes('x.com') || c.domain.includes('twitter.com')))) {
-              loggedIn = true;
-              console.error('[INFO] Login detected! Proceeding with extraction...');
-              break;
-            }
-          }
-
-          if (!loggedIn) {
-            console.error('[WARN] Login not detected within timeout. Proceeding anyway...');
-          }
-        } else {
-          console.error('[INFO] Twitter/X cookies found in session, proceeding...');
-        }
+        await this.checkTwitterLogin();
       }
 
     } catch (error) {
@@ -113,14 +95,14 @@ export class BrowserManager {
         ErrorCode.NETWORK_ERROR,
         `Failed to launch browser: ${error instanceof Error ? error.message : 'Unknown error'}`,
         false,
-        'Ensure Microsoft Edge is installed on your system'
+        `Ensure ${browserConfig.name} is installed on your system`
       );
     }
 
     return this.context;
   }
 
-  private shouldCheckTwitterLogin(targetUrl?: string): boolean {
+  private shouldCheckTwitterLogin(targetUrl?: string, browserType?: BrowserType): boolean {
     if (!targetUrl) {
       return true;
     }
@@ -133,21 +115,47 @@ export class BrowserManager {
   }
 
   /**
-   * Get Edge cookies file path based on platform
+   * Check and handle Twitter/X login
    */
-  private getEdgeCookiesPath(): string | null {
-    const platform = os.platform();
-    const homedir = os.homedir();
+  private async checkTwitterLogin(): Promise<void> {
+    if (!this.context) {
+      return;
+    }
 
-    switch (platform) {
-      case 'win32':
-        return path.join(homedir, 'AppData', 'Local', 'Microsoft', 'Edge', 'User Data', 'Default', 'Network', 'Cookies');
-      case 'darwin':
-        return path.join(homedir, 'Library', 'Application Support', 'Microsoft Edge', 'Default', 'Cookies');
-      case 'linux':
-        return path.join(homedir, '.config', 'microsoft-edge', 'Default', 'Cookies');
-      default:
-        return null;
+    // Check if we have Twitter/X cookies
+    const cookies = await this.context.cookies();
+    const hasTwitterCookie = cookies.some(c =>
+      c.domain.includes('x.com') || c.domain.includes('twitter.com')
+    );
+
+    if (!hasTwitterCookie) {
+      console.error('[WARN] No Twitter/X cookies found in session.');
+      console.error('[INFO] Please log in to Twitter/X in the browser window that will open.');
+      console.error('[INFO] The browser will wait for you to navigate to Twitter/X and log in.');
+      console.error('[INFO] After logging in, the extraction will proceed automatically.');
+
+      // Navigate to Twitter to give user a chance to log in
+      const page = this.context.pages()[0] || await this.context.newPage();
+      await page.goto('https://x.com');
+      console.error('[INFO] Waiting for you to log in... (Press Ctrl+C to cancel)');
+
+      // Wait for auth cookie (check every 2 seconds)
+      let loggedIn = false;
+      for (let i = 0; i < 60; i++) { // Wait up to 2 minutes
+        await page.waitForTimeout(2000);
+        const currentCookies = await this.context.cookies();
+        if (currentCookies.some(c => c.name === 'auth_token' && (c.domain.includes('x.com') || c.domain.includes('twitter.com')))) {
+          loggedIn = true;
+          console.error('[INFO] Login detected! Proceeding with extraction...');
+          break;
+        }
+      }
+
+      if (!loggedIn) {
+        console.error('[WARN] Login not detected within timeout. Proceeding anyway...');
+      }
+    } else {
+      console.error('[INFO] Twitter/X cookies found in session, proceeding...');
     }
   }
 

@@ -5,6 +5,7 @@ import * as fs from 'fs/promises';
 import * as os from 'os';
 import { ClipError } from '../../errors.js';
 import { ErrorCode } from '../../export/types.js';
+import { BrowserSelector } from '../browser-selector.js';
 
 jest.mock('playwright', () => ({
   chromium: {
@@ -14,10 +15,14 @@ jest.mock('playwright', () => ({
 
 jest.mock('fs/promises');
 
+jest.mock('../browser-selector.js');
+
 describe('BrowserManager', () => {
   const launchMock = chromium.launchPersistentContext as unknown as jest.Mock;
   const mkdirMock = fs.mkdir as unknown as jest.Mock;
   const accessMock = fs.access as unknown as jest.Mock;
+  // Cast to any to avoid strict typing issues with jest.MockedClass
+  const browserSelectorMock = BrowserSelector as any;
 
   const mockResolved = <T>(value: T) => {
     return jest.fn(() => Promise.resolve(value)) as jest.Mock;
@@ -31,6 +36,12 @@ describe('BrowserManager', () => {
 
     mkdirMock.mockImplementation(() => Promise.resolve());
     accessMock.mockImplementation(() => Promise.reject(new Error('not found')));
+
+    // Mock BrowserSelector to always return 'edge'
+    browserSelectorMock.mockImplementation(() => ({
+      select: (jest.fn() as any).mockResolvedValue('edge'),
+      isAvailable: (jest.fn() as any).mockResolvedValue(true),
+    }));
   });
 
   afterEach(() => {
@@ -89,7 +100,7 @@ describe('BrowserManager', () => {
     if (shouldHavePath) {
       expect(accessMock).toHaveBeenCalledTimes(1);
       const logs = consoleSpy.mock.calls.flat().join(' ');
-      expect(logs).toContain('Found Edge cookies');
+      expect(logs).toContain('Found Microsoft Edge cookies');
     } else {
       expect(accessMock).not.toHaveBeenCalled();
     }
@@ -298,9 +309,11 @@ describe('BrowserManager', () => {
     expect(context.pages).not.toHaveBeenCalled();
   });
 
-  it('should handle getEdgeCookiesPath returning null for unknown platform', async () => {
-    const originalPlatform = os.platform;
-    jest.spyOn(os, 'platform').mockReturnValue('freebsd' as NodeJS.Platform);
+  it('should handle cookiesPath returning null for unknown platform', async () => {
+    const originalPlatform = process.platform;
+    Object.defineProperty(process, 'platform', {
+      value: 'freebsd',
+    });
 
     const context = {
       close: mockResolved(undefined),
@@ -313,6 +326,8 @@ describe('BrowserManager', () => {
 
     expect(accessMock).not.toHaveBeenCalled();
 
-    (os.platform as unknown as jest.SpiedFunction<typeof os.platform>).mockRestore();
+    Object.defineProperty(process, 'platform', {
+      value: originalPlatform,
+    });
   });
 });
