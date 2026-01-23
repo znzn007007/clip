@@ -3,6 +3,9 @@ export type Platform = 'twitter' | 'zhihu' | 'wechat' | 'unknown';
 
 export type BrowserType = 'chrome' | 'edge' | 'auto';
 
+// Type for browsers that can be configured (excluding 'auto')
+export type ConfigurableBrowser = 'chrome' | 'edge';
+
 export interface BrowserConfig {
   channel: 'chrome' | 'msedge';
   name: string;
