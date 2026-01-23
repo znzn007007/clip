@@ -135,7 +135,7 @@ export class BrowserSelector {
 import * as path from 'path';
 import * as os from 'os';
 
-export const BROWSER_CONFIGS: Record<BrowserType, BrowserConfig> = {
+export const BROWSER_CONFIGS: Record<ConfigurableBrowser, BrowserConfig> = {
   edge: {
     channel: 'msedge',
     name: 'Microsoft Edge',
