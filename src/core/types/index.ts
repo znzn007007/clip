@@ -1,6 +1,15 @@
 // src/core/types/index.ts
 export type Platform = 'twitter' | 'zhihu' | 'wechat' | 'unknown';
 
+export type BrowserType = 'chrome' | 'edge' | 'auto';
+
+export interface BrowserConfig {
+  channel: 'chrome' | 'msedge';
+  name: string;
+  sessionDir: string;
+  cookiesPath: (platform: NodeJS.Platform) => string | null;
+}
+
 export interface ClipDoc {
   platform: Platform;
   sourceUrl: string;
