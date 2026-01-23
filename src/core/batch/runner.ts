@@ -35,6 +35,7 @@ export interface BatchOptions {
   json?: boolean;
   debug?: boolean;
   cdpEndpoint?: string;
+  browserType?: 'chrome' | 'edge' | 'auto';
   force?: boolean;
 }
 
@@ -76,7 +77,9 @@ export class BatchRunner {
     // Create a single browser manager for all URLs
     const browserManager = new BrowserManager(
       undefined,
-      options.cdpEndpoint ? { cdpEndpoint: options.cdpEndpoint } : undefined
+      options.cdpEndpoint || options.browserType
+        ? { cdpEndpoint: options.cdpEndpoint, browserType: options.browserType }
+        : undefined
     );
 
     try {

@@ -3,6 +3,14 @@ import { Command } from 'commander';
 import { BatchRunner } from '../../core/batch/runner.js';
 import { ClipOrchestrator } from '../../core/orchestrator.js';
 import type { ExportFormat } from '../../core/export/types.js';
+import type { BrowserType } from '../../core/types/index.js';
+
+function parseBrowserType(value: string): BrowserType {
+  if (value === 'chrome' || value === 'edge' || value === 'auto') {
+    return value;
+  }
+  throw new Error(`Invalid browser: ${value}. Use chrome, edge, or auto`);
+}
 
 export function registerArchiveCommand(program: Command): void {
   program
@@ -17,9 +25,13 @@ export function registerArchiveCommand(program: Command): void {
     .option('--cdp <endpoint>', 'Connect to existing browser via CDP')
     .option('--file <path>', 'Read URLs from file')
     .option('--stdin', 'Read URLs from stdin')
+    .option('--browser <browser>', 'Browser to use (chrome|edge|auto) (default: "auto")', 'auto')
     .option('--force', 'Force overwrite existing archives', false)
     .option('--verbose', 'Verbose output', false)
     .action(async (url: string | undefined, options) => {
+      // Validate and parse browser type
+      const browserType = parseBrowserType(options.browser);
+
       // Validate arguments
       const hasUrl = url && url.length > 0;
       const hasFile = options.file || options.stdin;
@@ -31,18 +43,18 @@ export function registerArchiveCommand(program: Command): void {
 
       // Single URL mode
       if (hasUrl && !hasFile) {
-        await handleSingleUrl(url!, options);
+        await handleSingleUrl(url!, options, browserType);
         return;
       }
 
       // Batch mode
-      await handleBatch(options);
+      await handleBatch(options, browserType);
     });
 }
 
-async function handleSingleUrl(url: string, options: any): Promise<void> {
+async function handleSingleUrl(url: string, options: any, browserType: BrowserType): Promise<void> {
   const orchestrator = new ClipOrchestrator(
-    options.cdp ? { cdpEndpoint: options.cdp } : undefined
+    options.cdp ? { cdpEndpoint: options.cdp, browserType } : { browserType }
   );
 
   try {
@@ -81,7 +93,7 @@ async function handleSingleUrl(url: string, options: any): Promise<void> {
   }
 }
 
-async function handleBatch(options: any): Promise<void> {
+async function handleBatch(options: any, browserType: BrowserType): Promise<void> {
   const runner = new BatchRunner();
 
   const source = options.file ? 'file' : 'stdin';
@@ -96,6 +108,7 @@ async function handleBatch(options: any): Promise<void> {
       format: options.format,
       downloadAssets: options.assets,
       cdpEndpoint: options.cdp,
+      browserType,
       force: options.force ?? false,
     });
   } catch (error) {
