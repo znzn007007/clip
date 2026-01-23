@@ -310,9 +310,14 @@ describe('BrowserManager', () => {
   });
 
   it('should handle cookiesPath returning null for unknown platform', async () => {
+    // Save original platform
     const originalPlatform = process.platform;
+
+    // Mock process.platform using Object.defineProperty
     Object.defineProperty(process, 'platform', {
       value: 'freebsd',
+      writable: true,
+      configurable: true,
     });
 
     const context = {
@@ -326,8 +331,70 @@ describe('BrowserManager', () => {
 
     expect(accessMock).not.toHaveBeenCalled();
 
+    // Restore original platform
     Object.defineProperty(process, 'platform', {
       value: originalPlatform,
+      writable: true,
+      configurable: true,
     });
+  });
+
+  it('应使用指定的浏览器启动', async () => {
+    const context = {
+      cookies: mockResolved([]),
+      close: mockResolved(undefined),
+    };
+    launchMock.mockImplementation(() => Promise.resolve(context));
+
+    // Mock BrowserSelector to track select calls
+    const selectMock = jest.fn() as any;
+    selectMock.mockResolvedValue('chrome');
+    browserSelectorMock.mockImplementation(() => ({
+      select: selectMock,
+      isAvailable: (jest.fn() as any).mockResolvedValue(true),
+    }));
+
+    const manager = new BrowserManager('./test-session', { browserType: 'chrome' });
+    await manager.launch('https://example.com');
+
+    expect(selectMock).toHaveBeenCalledWith('chrome');
+
+    // Reset to default mock
+    browserSelectorMock.mockImplementation(() => ({
+      select: (jest.fn() as any).mockResolvedValue('edge'),
+      isAvailable: (jest.fn() as any).mockResolvedValue(true),
+    }));
+  });
+
+  it('auto 模式应使用默认优先级', async () => {
+    const context = {
+      cookies: mockResolved([]),
+      close: mockResolved(undefined),
+    };
+    launchMock.mockImplementation(() => Promise.resolve(context));
+
+    // Mock BrowserSelector to track select calls and return 'edge' for 'auto'
+    const selectMock = jest.fn() as any;
+    selectMock.mockImplementation((browserType: string) => {
+      if (browserType === 'auto') {
+        return Promise.resolve('edge');
+      }
+      return Promise.resolve(browserType);
+    });
+    browserSelectorMock.mockImplementation(() => ({
+      select: selectMock,
+      isAvailable: (jest.fn() as any).mockResolvedValue(true),
+    }));
+
+    const manager = new BrowserManager('./test-session', { browserType: 'auto' });
+    await manager.launch('https://example.com');
+
+    expect(selectMock).toHaveBeenCalledWith('auto');
+
+    // Reset to default mock
+    browserSelectorMock.mockImplementation(() => ({
+      select: (jest.fn() as any).mockResolvedValue('edge'),
+      isAvailable: (jest.fn() as any).mockResolvedValue(true),
+    }));
   });
 });
