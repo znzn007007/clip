@@ -66,4 +66,5 @@ export enum ErrorCode {
   INVALID_URL = 'invalid_url',
   UNSUPPORTED_PLATFORM = 'unsupported_platform',
   ALREADY_ARCHIVED = 'already_archived',
+  BROWSER_NOT_FOUND = 'BROWSER_NOT_FOUND',
 }
