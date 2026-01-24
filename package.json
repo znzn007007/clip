@@ -1,10 +1,10 @@
 {
-  "name": "clip-client",
+  "name": "article-clip",
   "version": "0.1.0",
-  "description": "Local content archiver for Twitter, Zhihu, and WeChat Official Accounts",
+  "description": "Local content archiver for Twitter/X, Zhihu, and WeChat Official Accounts",
   "main": "dist/index.js",
   "bin": {
-    "clip": "./dist/cli/index.js"
+    "article-clip": "./dist/cli/index.js"
   },
   "type": "module",
   "scripts": {
@@ -13,9 +13,38 @@
     "test": "jest",
     "clip": "node dist/cli/index.js"
   },
-  "keywords": ["cli", "archiver", "twitter", "zhihu", "wechat"],
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "README_zh.md",
+    "LICENSE"
+  ],
+  "keywords": [
+    "cli",
+    "archiver",
+    "article",
+    "twitter",
+    "x",
+    "zhihu",
+    "wechat",
+    "weixin",
+    "markdown",
+    "web-clipper",
+    "content-saver"
+  ],
   "author": "nemo",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/znzn007007/clip.git"
+  },
+  "homepage": "https://github.com/znzn007007/clip#readme",
+  "bugs": {
+    "url": "https://github.com/znzn007007/clip/issues"
+  },
   "dependencies": {
     "playwright": "^1.48.0",
     "commander": "^12.0.0",
