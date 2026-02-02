@@ -27,7 +27,11 @@ export class TwitterHtmlToBlocks {
     const blocks: Block[] = [];
     const buffer: BufferToken[] = [];
 
-    const $articles = $('article[data-testid="tweet"]');
+    // Only select tweets in the main thread area, not sidebar recommendations
+    // Primary column contains the main thread, sidebar has "Who to follow" etc
+    const $articles = $('div[data-testid="primaryColumn"] article[data-testid="tweet"]');
+
+    console.error(`[DEBUG] TwitterHtmlToBlocks: found ${$articles.length} tweets in primary column`);
 
     $articles.each((index, article) => {
       // If this is not the first article, flush buffer and add separator

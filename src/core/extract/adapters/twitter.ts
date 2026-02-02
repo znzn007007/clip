@@ -27,13 +27,34 @@ export class TwitterAdapter extends BaseAdapter {
   async extract(page: RenderedPage): Promise<ExtractResult> {
     const warnings: string[] = [];
 
+    // Extract original author from URL (e.g., https://x.com/username/status/123)
+    const urlMatch = page.url.match(/x\.com\/([^\/]+)/);
+    const originalAuthorFromUrl = urlMatch ? urlMatch[1] : null;
+    console.error(`[DEBUG] Original author from URL: @${originalAuthorFromUrl}`);
+
     // Step 1: Extract metadata first (async)
     const metadata = await this.extractMetadata(page, warnings);
 
     // Step 2: Prefer rawData for threads (multiple tweets), use HTML for single tweets
     // If we have allTweets from rawData and it's a thread (more than 1 tweet), use rawData
     if (metadata.allTweets && metadata.allTweets.length > 1) {
-      const blocks = metadata.allTweets.flatMap((tweet, index) => {
+      console.error(`[DEBUG] TwitterAdapter: using rawData path with ${metadata.allTweets.length} tweets`);
+
+      // Filter tweets to only include original author's tweets (exclude replies/comments)
+      // This ensures we only get the main thread, not reply section
+      // Use author from URL if available, otherwise fall back to first tweet's author
+      const originalAuthor = originalAuthorFromUrl || metadata.allTweets[0].author.screenName;
+
+      // Debug: print first few tweet authors
+      console.error(`[DEBUG] First 5 tweet authors:`, metadata.allTweets.slice(0, 5).map(t => `@${t.author.screenName}`));
+
+      const mainThreadTweets = metadata.allTweets.filter(tweet =>
+        tweet.author.screenName === originalAuthor
+      );
+
+      console.error(`[DEBUG] TwitterAdapter: filtered to ${mainThreadTweets.length} tweets by @${originalAuthor}`);
+
+      const blocks = mainThreadTweets.flatMap((tweet, index) => {
         const tweetBlocks = this.blockBuilder.tweetToBlocks(tweet);
         // Add separator between tweets
         if (index > 0) {

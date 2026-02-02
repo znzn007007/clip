@@ -13,7 +13,21 @@ export class TwitterDomExtractor {
     const result = await page.evaluate(() => {
       const tweets: any[] = [];
 
-      document.querySelectorAll('article[data-testid="tweet"]').forEach(article => {
+      // Only select tweets in the main thread area (primaryColumn), not sidebar recommendations
+      const primaryColumn = document.querySelector('div[data-testid="primaryColumn"]');
+      const allTweets = document.querySelectorAll('article[data-testid="tweet"]');
+      const tweetArticles = primaryColumn
+        ? primaryColumn.querySelectorAll('article[data-testid="tweet"]')
+        : document.querySelectorAll('article[data-testid="tweet"]');
+
+      // Debug info will be returned in metadata
+      const debugInfo = {
+        hasPrimaryColumn: !!primaryColumn,
+        allTweetsCount: allTweets.length,
+        primaryColumnTweetsCount: tweetArticles.length
+      };
+
+      tweetArticles.forEach(article => {
         // Extract text - try multiple selectors
         let text = '';
 
@@ -139,11 +153,14 @@ export class TwitterDomExtractor {
         });
       });
 
-      return tweets;
+      return { tweets, debugInfo };
     });
 
+    // Output debug info
+    console.error(`[DEBUG] TwitterDomExtractor: hasPrimaryColumn=${result.debugInfo.hasPrimaryColumn}, allTweets=${result.debugInfo.allTweetsCount}, primaryColumnTweets=${result.debugInfo.primaryColumnTweetsCount}, extracted=${result.tweets.length}`);
+
     return {
-      tweets: result,
+      tweets: result.tweets,
       metadata: {
         extractedFrom: 'dom_extraction',
         timestamp: new Date().toISOString(),

@@ -226,8 +226,9 @@ Core types in `src/core/types/index.ts`:
 ## Known Issues
 
 1. ~~Asset downloading not implemented~~ - ✅ Completed (2026-01-18)
-2. **Zhihu parseFromRawState** is stub (returns null)
-3. **CDP connection** option exists but not fully implemented in `BrowserManager`
+2. ~~Twitter thread extraction incomplete~~ - ✅ Fixed (2026-02-02) - Now properly extracts full threads using virtual scrolling aware strategy
+3. **Zhihu parseFromRawState** is stub (returns null)
+4. **CDP connection** option exists but not fully implemented in `BrowserManager`
 
 ## Platform-Specific Notes
 
@@ -236,6 +237,38 @@ Core types in `src/core/types/index.ts`:
 - Auth detection: checks for `auth_token` cookie
 - Long-form tweets use different DOM structure
 - Output includes tweet metadata (likes, retweets, replies, views)
+
+**CRITICAL: Twitter Thread Extraction**
+Twitter uses virtual scrolling that unloads invisible tweets. When extracting threads:
+
+1. **Extract original author from URL** - Use URL pattern `/username/status/` to get the author, NOT from first tweet (which may be a reply)
+2. **Filter by original author** - Only save tweets from the original author to exclude reply section
+3. **Use small scroll steps** - Scroll by 50% of viewport height (`window.scrollBy(0, window.innerHeight * 0.5)`) NOT to bottom
+4. **Stop at first sign of decrease** - When author tweet count decreases (even by 1), stop immediately - this is the peak before entering reply section
+5. **Stop on low growth** - When growth is <=1 tweet for 2 consecutive scrolls, stop - indicates end of thread
+6. **DON'T scroll back to top** - Stay at current position for DOM extraction; scrolling back causes Twitter to unload tweets
+7. **Count only original author's tweets** - When checking scroll progress, only count tweets matching original author, NOT all tweets on page
+
+**Common mistake:** Scrolling to bottom loads reply section, then scrolling back to top unloads thread content. Result: incomplete thread extraction.
+
+**Correct flow:**
+- Scroll in small steps (50% viewport)
+- Count only original author's tweets
+- Stop when count decreases OR growth is low for 2 scrolls
+- Extract DOM immediately at current position
+- Filter by original author during final processing
+
+**Why this works:** 50% scroll steps minimize Twitter's tweet unloading. Stopping at the first decrease captures the peak before unloading begins.
+
+**Debugging Journey (2026-02-02):**
+- **Initial Problem:** Only 4-8 tweets extracted from 10+ tweet threads
+- **Root Cause Discovery:** Twitter's virtual scrolling unloads tweets outside viewport
+- **Failed Attempts:**
+  - Fixed threshold (>=8 tweets) - ❌ Missed tweets in longer threads
+  - Scrolling to bottom then back to top - ❌ Twitter unloaded tweets during scroll back
+  - 80% scroll steps - ❌ Too aggressive, still triggered unloading
+- **Solution:** 50% scroll steps + dual stop conditions (decrease OR low growth)
+- **Key Insight:** Stop BEFORE entering reply section, not after. First decrease = peak.
 
 ### Zhihu
 - Domains: `zhihu.com`
