@@ -7,7 +7,7 @@ export const BROWSER_CONFIGS: Record<ConfigurableBrowser, BrowserConfig> = {
   edge: {
     channel: 'msedge',
     name: 'Microsoft Edge',
-    sessionDir: '.clip/session-edge',
+    sessionDir: 'session-edge',
     cookiesPath: (platform: NodeJS.Platform) => {
       const homedir = os.homedir();
       switch (platform) {
@@ -25,7 +25,7 @@ export const BROWSER_CONFIGS: Record<ConfigurableBrowser, BrowserConfig> = {
   chrome: {
     channel: 'chrome',
     name: 'Google Chrome',
-    sessionDir: '.clip/session-chrome',
+    sessionDir: 'session-chrome',
     cookiesPath: (platform: NodeJS.Platform) => {
       const homedir = os.homedir();
       switch (platform) {

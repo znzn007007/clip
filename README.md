@@ -98,9 +98,10 @@ When you first run `article-clip`, it will:
 
 ### Session Persistence
 
-Login state is saved in:
-- Chrome: `~/.article-clip/session-chrome/`
-- Edge: `~/.article-clip/session-edge/`
+Login state is saved under the OS app data directory:
+- Windows: `%LOCALAPPDATA%\\article-clip\\session-chrome` / `%LOCALAPPDATA%\\article-clip\\session-edge`
+- macOS: `~/Library/Application Support/article-clip/session-chrome` / `~/Library/Application Support/article-clip/session-edge`
+- Linux: `$XDG_DATA_HOME/article-clip/session-chrome` / `$XDG_DATA_HOME/article-clip/session-edge` (fallback: `~/.local/share/article-clip/...`)
 
 Close the browser when prompted to save your session properly.
 

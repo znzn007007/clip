@@ -7,6 +7,6 @@ clips/
 tmpclaude-*
 .worktrees/
 debug/
-.clip/
+.article-clip/
 .idea/
 coverage/

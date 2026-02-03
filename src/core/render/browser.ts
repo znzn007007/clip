@@ -8,6 +8,7 @@ import { ErrorCode } from '../export/types.js';
 import { detectPlatform } from './utils.js';
 import { BrowserSelector } from './browser-selector.js';
 import { BROWSER_CONFIGS } from '../config/browser-config.js';
+import { getAppDataDir } from '../config/app-dirs.js';
 import type { BrowserType, ConfigurableBrowser } from '../types/index.js';
 
 export interface BrowserOptions {
@@ -21,7 +22,7 @@ export class BrowserManager {
   private selectedBrowser?: BrowserType;
 
   constructor(
-    sessionDir: string = path.join(process.cwd(), '.clip', 'session'),
+    sessionDir: string = path.join(getAppDataDir('article-clip'), 'session'),
     options?: BrowserOptions
   ) {
     this.sessionDir = sessionDir;
@@ -41,7 +42,7 @@ export class BrowserManager {
     const browserConfig = BROWSER_CONFIGS[resolvedBrowser as ConfigurableBrowser];
 
     // Step 2: Determine session directory
-    const sessionDir = path.join(process.cwd(), browserConfig.sessionDir);
+    const sessionDir = path.join(getAppDataDir('article-clip'), browserConfig.sessionDir);
 
     // Ensure session directory exists
     try {

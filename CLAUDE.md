@@ -169,8 +169,9 @@ Supports multiple browsers with auto-detection:
 **Auto priority:** Edge → Chrome (fallback)
 
 **Session directories:**
-- Chrome: `.clip/session-chrome/`
-- Edge: `.clip/session-edge/`
+- Windows: `%LOCALAPPDATA%\\article-clip\\session-chrome` / `%LOCALAPPDATA%\\article-clip\\session-edge`
+- macOS: `~/Library/Application Support/article-clip/session-chrome` / `~/Library/Application Support/article-clip/session-edge`
+- Linux: `$XDG_DATA_HOME/article-clip/session-chrome` / `$XDG_DATA_HOME/article-clip/session-edge` (fallback: `~/.local/share/article-clip/...`)
 
 ### Deduplication Strategy
 

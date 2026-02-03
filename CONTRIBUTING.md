@@ -146,5 +146,5 @@ Create one file per day in `docs/dailyReport/` named `YYYY-MM-DD-summary.md`. Do
 
 - [ ] Image position fixing (Twitter images appear at end instead of inline)
 - [ ] Browser strategy refactoring (currently Edge-only)
-- [ ] Config file support (~/.clip/config.json)
+- [ ] Config file support (~/.article-clip/config.json)
 - [ ] Queue command implementation

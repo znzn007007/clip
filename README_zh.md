@@ -98,9 +98,10 @@ article-clip install-browsers
 
 ### 会话持久化
 
-登录状态保存在：
-- Chrome: `~/.article-clip/session-chrome/`
-- Edge: `~/.article-clip/session-edge/`
+登录状态保存在系统应用数据目录：
+- Windows: `%LOCALAPPDATA%\\article-clip\\session-chrome` / `%LOCALAPPDATA%\\article-clip\\session-edge`
+- macOS: `~/Library/Application Support/article-clip/session-chrome` / `~/Library/Application Support/article-clip/session-edge`
+- Linux: `$XDG_DATA_HOME/article-clip/session-chrome` / `$XDG_DATA_HOME/article-clip/session-edge`（兜底：`~/.local/share/article-clip/...`）
 
 请在提示时关闭浏览器，以正确保存会话。
 
