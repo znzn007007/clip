@@ -2,7 +2,6 @@
   "name": "article-clip",
   "version": "0.1.0",
   "description": "Local content archiver for Twitter/X, Zhihu, and WeChat Official Accounts",
-  "main": "dist/index.js",
   "bin": {
     "article-clip": "./dist/cli/index.js"
   },

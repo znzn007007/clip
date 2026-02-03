@@ -145,7 +145,7 @@ The `.archived.json` file in your output directory tracks all archived URLs.
 
 ## Development
 
-For development and contributing guidelines, see [README.dev.md](README.dev.md).
+For development and contributing guidelines, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 

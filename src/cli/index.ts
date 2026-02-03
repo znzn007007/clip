@@ -9,7 +9,7 @@ export function buildProgram(): Command {
   const program = new Command();
 
   program
-    .name('clip')
+    .name('article-clip')
     .description('Local content archiver')
     .version('0.1.0');
 

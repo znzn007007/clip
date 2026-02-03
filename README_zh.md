@@ -145,7 +145,7 @@ article-clip "https://x.com/user/status/123" --force
 
 ## 开发
 
-开发与贡献指南请参考 [README.dev.md](README.dev.md)。
+开发与贡献指南请参考 [CONTRIBUTING.md](CONTRIBUTING.md)。
 
 ## 许可证
 

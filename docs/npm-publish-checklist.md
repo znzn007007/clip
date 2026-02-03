@@ -12,7 +12,7 @@
 - [x] .npmignore: includes README_zh.md
 - [x] README.md: User-facing documentation (English)
 - [x] README_zh.md: User-facing documentation (Chinese)
-- [x] README.dev.md: Developer documentation (preserved)
+- [x] CONTRIBUTING.md: Developer documentation (preserved)
 - [x] LICENSE: MIT license verified
 - [x] Shebang: Present in `dist/cli/index.js`
 - [x] Build: Successful
@@ -24,7 +24,7 @@
 - `dist/` - Compiled JavaScript files
 - `README.md` - English user documentation
 - `README_zh.md` - Chinese user documentation
-- `README.dev.md` - Developer documentation
+- `CONTRIBUTING.md` - Developer documentation
 - `LICENSE` - MIT license
 - `package.json` - Package metadata
 
